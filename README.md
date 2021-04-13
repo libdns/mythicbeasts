@@ -16,11 +16,11 @@ Remove this section from the readme before publishing.
 
 ---
 
-\<PROVIDER NAME\> for [`libdns`](https://github.com/libdns/libdns)
+Mythic Beasts for [`libdns`](https://github.com/libdns/libdns)
 =======================
 
 [![Go Reference](https://pkg.go.dev/badge/test.svg)](https://pkg.go.dev/github.com/libdns/TODO:PROVIDER_NAME)
 
-This package implements the [libdns interfaces](https://github.com/libdns/libdns) for \<PROVIDER\>, allowing you to manage DNS records.
+This package implements the [libdns interfaces](https://github.com/libdns/libdns) for [Mythic Beasts](https://www.mythic-beasts.com/), allowing you to manage DNS records.
 
 TODO: Show how to configure and use. Explain any caveats.
