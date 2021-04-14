@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/libdns/libdns"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -44,7 +45,12 @@ func (p *Provider) login(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("login: unknown auth error")
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+
+		}
+	}(resp.Body)
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -62,7 +68,7 @@ func (p *Provider) login(ctx context.Context) error {
 			return fmt.Errorf("login: error parsing error: %w", err)
 		}
 
-		return fmt.Errorf("login: %d: %w", resp.StatusCode, errResp)
+		return fmt.Errorf("login: %d: %s", resp.StatusCode, errResp.ErrorMessage+errResp.ErrorDescription)
 	}
 
 	authResp := mythicAuthResponse{}
@@ -104,7 +110,9 @@ func (p *Provider) addRecord(ctx context.Context, zone string, record libdns.Rec
 	if err != nil {
 		return nil, fmt.Errorf("addRecord: Error creating JSON payload: %s", err.Error())
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
 
 	respBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -121,9 +129,9 @@ func (p *Provider) addRecord(ctx context.Context, zone string, record libdns.Rec
 			if err != nil {
 				return nil, fmt.Errorf("addRecord: unknown error: %d", resp.StatusCode)
 			}
-			return nil, fmt.Errorf("addRecord: %d: %w", resp.StatusCode, errResp.Error)
+			return nil, fmt.Errorf("addRecord: %d: %s", resp.StatusCode, errResp.Error)
 		}
-		return nil, fmt.Errorf("addRecord: %d: %w", resp.StatusCode, errorsResp.Errors)
+		return nil, fmt.Errorf("addRecord: %d: %s", resp.StatusCode, errorsResp.Errors)
 	}
 
 	appendResp := mythicRecordUpdate{}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -37,27 +38,29 @@ func (p *Provider) unFQDN(fqdn string) string {
 func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record, error) {
 	err := p.login(ctx)
 	if err != nil {
-		fmt.Errorf("login: provider login failed: %d", err)
+		_ = fmt.Errorf("login: provider login failed: %d", err)
 		return nil, err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL+"/zones/"+zone+"/records", nil)
 	if err != nil {
-		fmt.Errorf("login: provider record request failed: %d", err)
+		_ = fmt.Errorf("login: provider record request failed: %d", err)
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+p.token.Token)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		fmt.Errorf("login: provider record request failed: %d", err)
+		_ = fmt.Errorf("login: provider record request failed: %d", err)
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Errorf("login: failed to read response body: %d", err)
+		_ = fmt.Errorf("login: failed to read response body: %d", err)
 		return nil, err
 	}
 

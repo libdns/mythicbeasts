@@ -45,8 +45,8 @@ func main() {
 
 	// Append Records Test
 	recordsToAdd := []libdns.Record{
-		libdns.Record{Type: "A", Name: "test1", Value: "1.2.3.4", TTL: time.Duration(123) * time.Second},
-		libdns.Record{Type: "CNAME", Name: "test2", Value: "proxy.server.com.", TTL: time.Duration(666) * time.Second},
+		{Type: "A", Name: "test1", Value: "1.2.3.4", TTL: time.Duration(123) * time.Second},
+		{Type: "CNAME", Name: "test2", Value: "proxy.server.com.", TTL: time.Duration(666) * time.Second},
 	}
 
 	recordsAdded, err := p.AppendRecords(context.TODO(), zone, recordsToAdd)
