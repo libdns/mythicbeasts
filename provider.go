@@ -35,7 +35,7 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 		return nil, err
 	}
 
-	req, err := http.NewRequest("GET", "https://api.mythic-beasts.com/dns/v2/zones/"+zone+"/records", nil)
+	req, err := http.NewRequest("GET", apiURL+"/zones/"+zone+"/records", nil)
 	if err != nil {
 		fmt.Errorf("login: provider record request failed: %d", err)
 		return nil, err
