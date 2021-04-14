@@ -6,7 +6,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/libdns/libdns"
@@ -20,27 +21,32 @@ import (
 
 // Provider facilitates DNS record manipulation with Mythic Beasts.
 type Provider struct {
-	// TODO: put config fields here (with snake_case json
-	// struct tags on exported fields), for example:
 	KeyID  string `json:"key_id,omitempty"`
 	Secret string `json:"secret,omitempty"`
 	token  mythicAuthResponse
+
+	mutex sync.Mutex
+}
+
+// unFQDN trims any trailing "." from fqdn.
+func (p *Provider) unFQDN(fqdn string) string {
+	return strings.TrimSuffix(fqdn, ".")
 }
 
 // GetRecords lists all records in given zone.
 func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record, error) {
-	err := p.login()
+	err := p.login(ctx)
 	if err != nil {
 		fmt.Errorf("login: provider login failed: %d", err)
 		return nil, err
 	}
 
-	req, err := http.NewRequest("GET", apiURL+"/zones/"+zone+"/records", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL+"/zones/"+zone+"/records", nil)
 	if err != nil {
 		fmt.Errorf("login: provider record request failed: %d", err)
 		return nil, err
 	}
-	req.Header.Set("Authorization", os.ExpandEnv("Bearer "+p.token.Token))
+	req.Header.Set("Authorization", "Bearer "+p.token.Token)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -55,7 +61,7 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 		return nil, err
 	}
 
-	result := mythicRecordsResponse{}
+	result := mythicRecords{}
 	if err := json.Unmarshal(body, &result); err != nil {
 		fmt.Errorf("login: failed to extract JSON data: %d", err)
 		return nil, err
@@ -75,18 +81,69 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 
 // AppendRecords adds records to the zone. It returns the records that were added.
 func (p *Provider) AppendRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
-	return nil, fmt.Errorf("TODO: not implemented")
+	err := p.login(ctx)
+	if err != nil {
+		fmt.Errorf("login: provider login failed: %d", err)
+		return nil, err
+	}
+
+	var appendedRecords []libdns.Record
+
+	for _, record := range records {
+		newRecord, err := p.addRecord(ctx, p.unFQDN(zone), record)
+		if err != nil {
+			fmt.Errorf("AppendRecords: %d", err)
+			return nil, err
+		}
+		appendedRecords = append(appendedRecords, newRecord[0])
+	}
+
+	return appendedRecords, nil
 }
 
 // SetRecords sets the records in the zone, either by updating existing records or creating new ones.
 // It returns the updated records.
 func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
-	return nil, fmt.Errorf("TODO: not implemented")
+	err := p.login(ctx)
+	if err != nil {
+		fmt.Errorf("login: provider login failed: %d", err)
+		return nil, err
+	}
+
+	var setRecords []libdns.Record
+
+	for _, record := range records {
+		setRecord, err := p.updateRecord(ctx, p.unFQDN(zone), record)
+		if err != nil {
+			fmt.Errorf("SetRecords: %d", err)
+			return setRecords, err
+		}
+		setRecords = append(setRecords, setRecord...)
+	}
+
+	return setRecords, nil
 }
 
 // DeleteRecords deletes the records from the zone. It returns the records that were deleted.
 func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
-	return nil, fmt.Errorf("TODO: not implemented")
+	err := p.login(ctx)
+	if err != nil {
+		fmt.Errorf("login: provider login failed: %d", err)
+		return nil, err
+	}
+
+	var deletedRecords []libdns.Record
+
+	for _, record := range records {
+		deletedRecord, err := p.removeRecord(ctx, p.unFQDN(zone), record)
+		if err != nil {
+			fmt.Errorf("DeleteRecords: %d", err)
+			return deletedRecords, err
+		}
+		deletedRecords = append(deletedRecords, deletedRecord...)
+	}
+
+	return deletedRecords, nil
 }
 
 // Interface guards
