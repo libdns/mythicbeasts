@@ -153,9 +153,54 @@ func (p *Provider) updateRecord(ctx context.Context, zone string, record libdns.
 	return nil, nil
 }
 
-func (p *Provider) removeRecord(ctx context.Context, domain string, record libdns.Record) ([]libdns.Record, error) {
+func (p *Provider) removeRecord(ctx context.Context, zone string, record libdns.Record) ([]libdns.Record, error) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
+	data := mythicRecords{}
+	data.Records = append(data.Records, mythicRecord{Type: record.Type, Name: record.Name, Value: record.Value, TTL: int(record.TTL.Seconds())})
+
+	payload, err := json.Marshal(data)
+	if err != nil {
+		return nil, fmt.Errorf("removeRecord: Error creating JSON payload: %s", err.Error())
+	}
+
+	body := bytes.NewReader(payload)
+	req, err := http.NewRequestWithContext(ctx, "DELETE", apiURL+"/zones/"+zone+"/records", body)
+
 	return nil, nil
+}
+
+func (p *Provider) doRequest(req *http.Request, result interface{}) (mythicError, error) {
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+p.token.Token)
+
+	resp, err := http.DefaultClient.Do(req)
+
+	if err != nil {
+		return mythicError{}, err
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		var response mythicError
+		if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+			return mythicError{}, err
+		}
+
+		return response, fmt.Errorf("Mythic Beasts returned %s ", response.Error)
+	}
+
+	// the api does not return the json object on 201 or 204, so we just stop here
+	if resp.StatusCode > 200 {
+		return mythicError{}, nil
+	}
+
+	// if we get a 200, we parse the json object
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return mythicError{}, err
+	}
+
+	return mythicError{}, nil
 }
