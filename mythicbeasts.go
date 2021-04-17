@@ -1,18 +1,14 @@
 package mythicbeasts
 
 type mythicAuthResponse struct {
-	Token     string `json:"access_token"` // The bearer token for use in API requests
-	Lifetime  int    `json:"expires_in"`   // The maximum lifetime of the token in seconds
-	TokenType string `json:"token_type"`   // The token type must be 'bearer'
+	Token     string `json:"access_token,omitempty"` // The bearer token for use in API requests
+	Lifetime  int    `json:"expires_in,omitempty"`   // The maximum lifetime of the token in seconds
+	TokenType string `json:"token_type,omitempty"`   // The token type must be 'bearer'
 }
 
 type mythicAuthResponseError struct {
-	ErrorMessage     string `json:"error"`
-	ErrorDescription string `json:"error_description"`
-}
-
-type mythicRecords struct {
-	Records []mythicRecord `json:"records"`
+	ErrorMessage     string `json:"error,omitempty"`
+	ErrorDescription string `json:"error_description,omitempty"`
 }
 
 type mythicRecord struct {
@@ -22,6 +18,10 @@ type mythicRecord struct {
 	TTL   int    `json:"ttl,omitempty"`
 }
 
+type mythicRecords struct {
+	Records []mythicRecord `json:"records,omitempty"`
+}
+
 type mythicRecordUpdate struct {
 	Message        string `json:"message,omitempty"`
 	RecordsAdded   int    `json:"records_added,omitempty"`
@@ -29,9 +29,9 @@ type mythicRecordUpdate struct {
 }
 
 type mythicError struct {
-	Error string `json:"error"`
+	Error string `json:"error,omitempty"`
 }
 
 type mythicErrors struct {
-	Errors []string `json:""`
+	Errors []string `json:",omitempty"`
 }
