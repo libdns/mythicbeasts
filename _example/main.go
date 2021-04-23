@@ -3,58 +3,46 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/libdns/libdns"
-	"os"
 	"time"
 
+	"github.com/libdns/libdns"
 	"github.com/tombish/mythicbeasts-provider"
 )
 
 func main() {
-	_ = os.Setenv("LIBDNS_MYTHICBEASTS_KEYID", "PLACE_KEYID_HERE")
-	_ = os.Setenv("LIBDNS_MYTHICBEASTS_SECRET", "PLACE_SECRET_HERE")
-	_ = os.Setenv("LIBDNS_MYTHICBEASTS_ZONE", "PLACE_ZONE_HERE")
+	ctx := context.TODO()
 
-	keyID := os.Getenv("LIBDNS_MYTHICBEASTS_KEYID")
-	secret := os.Getenv("LIBDNS_MYTHICBEASTS_SECRET")
-	zone := os.Getenv("LIBDNS_MYTHICBEASTS_ZONE")
+	zone := "example.com."
 
-	p := &mythicbeasts.Provider{
-		KeyID: keyID, Secret: secret,
-	}
+	provider := mythicbeasts.Provider{KeyID: "KEYID_GOES_HERE", Secret: "SECRET_GOES_HERE"}
+
 	// Get Records Test
-	records, err := p.GetRecords(context.TODO(), zone)
+	records, err := provider.GetRecords(ctx, zone)
 	if err != nil {
-		fmt.Printf("Error: %s", err.Error())
+		fmt.Printf("ERROR: %s\n", err.Error())
 	}
 
-	recordsToAdd := []libdns.Record{
+	recordsAdded, err := provider.AppendRecords(ctx, zone, []libdns.Record{
 		{Type: "A", Name: "test1", Value: "1.2.3.4", TTL: time.Duration(123) * time.Second},
 		{Type: "CNAME", Name: "test2", Value: "proxy.server.com.", TTL: time.Duration(666) * time.Second},
+	})
+	if err != nil {
+		fmt.Printf("ERROR: %s\n", err.Error())
 	}
 
-	recordsToSet := []libdns.Record{
+	recordsSet, err := provider.SetRecords(ctx, zone, []libdns.Record{
 		{Type: "A", Name: "test1", Value: "5.2.3.4", TTL: time.Duration(999) * time.Second},
 		{Type: "CNAME", Name: "test2", Value: "testies.test.me", TTL: time.Duration(999) * time.Second},
 		{Type: "CNAME", Name: "test3", Value: "testies.test.no"},
+	})
+	if err != nil {
+		fmt.Printf("ERROR: %s\n", err.Error())
 	}
 
-	recordsToDelete := []libdns.Record{
+	recordsDeleted, err := provider.DeleteRecords(ctx, zone, []libdns.Record{
 		{Type: "A", Name: "test1"},
 		{Type: "CNAME", Name: "test2"},
-	}
-
-	recordsAdded, err := p.AppendRecords(context.TODO(), zone, recordsToAdd)
-	if err != nil {
-		fmt.Printf("ERROR: %s\n", err.Error())
-	}
-
-	recordsSet, err := p.SetRecords(context.TODO(), zone, recordsToSet)
-	if err != nil {
-		fmt.Printf("ERROR: %s\n", err.Error())
-	}
-
-	recordsDeleted, err := p.DeleteRecords(context.TODO(), zone, recordsToDelete)
+	})
 	if err != nil {
 		fmt.Printf("ERROR: %s\n", err.Error())
 	}
