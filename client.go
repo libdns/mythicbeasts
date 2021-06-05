@@ -38,7 +38,7 @@ func (p *Provider) login(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("login: unknown error when creating http.NewRequest()")
 	}
-	req.SetBasicAuth(os.ExpandEnv(p.KeyID), os.ExpandEnv(p.Secret))
+	req.SetBasicAuth(p.KeyID, p.Secret)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := http.DefaultClient.Do(req)
