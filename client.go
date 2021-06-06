@@ -101,7 +101,7 @@ func (p *Provider) addRecord(ctx context.Context, zone string, record libdns.Rec
 	}
 
 	body := bytes.NewReader(payload)
-	req, err := http.NewRequestWithContext(ctx, "POST", apiURL+"/zones/"+zone+"/records", body)
+	req, err := http.NewRequestWithContext(ctx, "POST", apiURL+"/zones/"+p.unFQDN(zone)+"/records", body)
 	if err != nil {
 		return nil, fmt.Errorf("addRecord: Error in NewRequestWithContext: %s", err.Error())
 	}
@@ -168,7 +168,7 @@ func (p *Provider) updateRecord(ctx context.Context, zone string, record libdns.
 
 	req, err := http.NewRequestWithContext(ctx, "PUT", apiURL+
 		"/zones/"+
-		zone+
+		p.unFQDN(zone)+
 		"/records/"+
 		record.Name+"/"+
 		record.Type+
@@ -238,7 +238,7 @@ func (p *Provider) removeRecord(ctx context.Context, zone string, record libdns.
 	body := bytes.NewReader(payload)
 	req, err := http.NewRequestWithContext(ctx, "DELETE", apiURL+
 		"/zones/"+
-		zone+
+		p.unFQDN(zone)+
 		"/records/"+
 		record.Name+"/"+
 		record.Type+

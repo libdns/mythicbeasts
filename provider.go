@@ -37,7 +37,7 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", apiURL+"/zones/"+zone+"/records", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL+"/zones/"+p.unFQDN(zone)+"/records", nil)
 	if err != nil {
 		_ = fmt.Errorf("login: provider record request failed: %d", err)
 		return nil, err
