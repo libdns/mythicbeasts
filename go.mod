@@ -1,5 +1,4 @@
-//TODO: revise on submission to libdns
-module github.com/tombish/mythicbeasts-provider
+module github.com/libdns/mythicbeasts-provider
 
 go 1.16
 

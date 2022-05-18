@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/libdns/libdns"
-	"github.com/tombish/mythicbeasts-provider"
+	"github.com/libdns/mythicbeasts-provider"
 )
 
 func main() {
@@ -22,6 +22,7 @@ func main() {
 		fmt.Printf("ERROR: %s\n", err.Error())
 	}
 
+	// Append Records Test
 	recordsAdded, err := provider.AppendRecords(ctx, zone, []libdns.Record{
 		{Type: "A", Name: "test1", Value: "1.2.3.4", TTL: time.Duration(123) * time.Second},
 		{Type: "CNAME", Name: "test2", Value: "proxy.server.com.", TTL: time.Duration(666) * time.Second},
@@ -30,6 +31,7 @@ func main() {
 		fmt.Printf("ERROR: %s\n", err.Error())
 	}
 
+	// Set Records Test
 	recordsSet, err := provider.SetRecords(ctx, zone, []libdns.Record{
 		{Type: "A", Name: "test1", Value: "5.2.3.4", TTL: time.Duration(999) * time.Second},
 		{Type: "CNAME", Name: "test2", Value: "testies.test.me", TTL: time.Duration(999) * time.Second},
@@ -39,6 +41,7 @@ func main() {
 		fmt.Printf("ERROR: %s\n", err.Error())
 	}
 
+	// Delete Records Test
 	recordsDeleted, err := provider.DeleteRecords(ctx, zone, []libdns.Record{
 		{Type: "A", Name: "test1"},
 		{Type: "CNAME", Name: "test2"},
