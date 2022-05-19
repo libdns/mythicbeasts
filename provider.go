@@ -33,21 +33,18 @@ func (p *Provider) unFQDN(fqdn string) string {
 func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record, error) {
 	err := p.login(ctx)
 	if err != nil {
-		_ = fmt.Errorf("login: provider login failed: %d", err)
-		return nil, err
+		return nil, fmt.Errorf("login: provider login failed: %d", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL+"/zones/"+p.unFQDN(zone)+"/records", nil)
 	if err != nil {
-		_ = fmt.Errorf("login: provider record request failed: %d", err)
-		return nil, err
+		return nil, fmt.Errorf("login: provider record request failed: %d", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+p.token.Token)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		_ = fmt.Errorf("login: provider record request failed: %d", err)
-		return nil, err
+		return nil, fmt.Errorf("login: provider record request failed: %d", err)
 	}
 	defer func(Body io.ReadCloser) {
 		_ = Body.Close()
@@ -55,14 +52,12 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		_ = fmt.Errorf("login: failed to read response body: %d", err)
-		return nil, err
+		return nil, fmt.Errorf("login: failed to read response body: %d", err)
 	}
 
 	result := mythicRecords{}
-	if err := json.Unmarshal(body, &result); err != nil {
-		fmt.Errorf("login: failed to extract JSON data: %d", err)
-		return nil, err
+	if err := json.Unmarshal(body, &result); err != nil {		
+		return nil, fmt.Errorf("login: failed to extract JSON data: %d", err)
 	}
 	var records []libdns.Record
 
@@ -80,18 +75,16 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 // AppendRecords adds records to the zone. It returns the records that were added.
 func (p *Provider) AppendRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
 	err := p.login(ctx)
-	if err != nil {
-		fmt.Errorf("login: provider login failed: %d", err)
-		return nil, err
+	if err != nil {		
+		return nil, fmt.Errorf("login: provider login failed: %d", err)
 	}
 
 	var appendedRecords []libdns.Record
 
 	for _, record := range records {
 		newRecord, err := p.addRecord(ctx, p.unFQDN(zone), record)
-		if err != nil {
-			fmt.Errorf("AppendRecords: %d", err)
-			return nil, err
+		if err != nil {			
+			return nil, fmt.Errorf("AppendRecords: %d", err)
 		}
 		appendedRecords = append(appendedRecords, newRecord[0])
 	}
@@ -103,18 +96,16 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 // It returns the updated records.
 func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
 	err := p.login(ctx)
-	if err != nil {
-		fmt.Errorf("login: provider login failed: %d", err)
-		return nil, err
+	if err != nil {		
+		return nil, fmt.Errorf("login: provider login failed: %d", err)
 	}
 
 	var setRecords []libdns.Record
 
 	for _, record := range records {
 		setRecord, err := p.updateRecord(ctx, p.unFQDN(zone), record)
-		if err != nil {
-			fmt.Errorf("SetRecords: %d", err)
-			return setRecords, err
+		if err != nil {			
+			return setRecords, fmt.Errorf("SetRecords: %d", err)
 		}
 		setRecords = append(setRecords, setRecord...)
 	}
@@ -125,18 +116,16 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 // DeleteRecords deletes the records from the zone. It returns the records that were deleted.
 func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
 	err := p.login(ctx)
-	if err != nil {
-		fmt.Errorf("login: provider login failed: %d", err)
-		return nil, err
+	if err != nil {		
+		return nil, fmt.Errorf("login: provider login failed: %d", err)
 	}
 
 	var deletedRecords []libdns.Record
 
 	for _, record := range records {
 		deletedRecord, err := p.removeRecord(ctx, p.unFQDN(zone), record)
-		if err != nil {
-			fmt.Errorf("DeleteRecords: %d", err)
-			return deletedRecords, err
+		if err != nil {			
+			return deletedRecords, fmt.Errorf("DeleteRecords: %d", err)
 		}
 		deletedRecords = append(deletedRecords, deletedRecord...)
 	}

@@ -24,8 +24,8 @@ func main() {
 
 	// Append Records Test
 	recordsAdded, err := provider.AppendRecords(ctx, zone, []libdns.Record{
-		{Type: "A", Name: "test1", Value: "1.2.3.4", TTL: time.Duration(123) * time.Second},
-		{Type: "CNAME", Name: "test2", Value: "proxy.server.com.", TTL: time.Duration(666) * time.Second},
+		{Type: "A", Name: "test1", Value: "8.8.4.4", TTL: time.Duration(123) * time.Second},
+		{Type: "CNAME", Name: "test2", Value: "www.example.com.", TTL: time.Duration(666) * time.Second},
 	})
 	if err != nil {
 		fmt.Printf("ERROR: %s\n", err.Error())
@@ -33,9 +33,9 @@ func main() {
 
 	// Set Records Test
 	recordsSet, err := provider.SetRecords(ctx, zone, []libdns.Record{
-		{Type: "A", Name: "test1", Value: "5.2.3.4", TTL: time.Duration(999) * time.Second},
-		{Type: "CNAME", Name: "test2", Value: "testies.test.me", TTL: time.Duration(999) * time.Second},
-		{Type: "CNAME", Name: "test3", Value: "testies.test.no"},
+		{Type: "A", Name: "test1", Value: "8.8.8.8", TTL: time.Duration(999) * time.Second},
+		{Type: "CNAME", Name: "test2", Value: "test2.example.com", TTL: time.Duration(999) * time.Second},
+		{Type: "CNAME", Name: "test3", Value: "test3.example.net"},
 	})
 	if err != nil {
 		fmt.Printf("ERROR: %s\n", err.Error())
