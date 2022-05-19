@@ -56,7 +56,7 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 	}
 
 	result := mythicRecords{}
-	if err := json.Unmarshal(body, &result); err != nil {		
+	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, fmt.Errorf("login: failed to extract JSON data: %d", err)
 	}
 	var records []libdns.Record
@@ -75,7 +75,7 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 // AppendRecords adds records to the zone. It returns the records that were added.
 func (p *Provider) AppendRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
 	err := p.login(ctx)
-	if err != nil {		
+	if err != nil {
 		return nil, fmt.Errorf("login: provider login failed: %d", err)
 	}
 
@@ -83,7 +83,7 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 
 	for _, record := range records {
 		newRecord, err := p.addRecord(ctx, p.unFQDN(zone), record)
-		if err != nil {			
+		if err != nil {
 			return nil, fmt.Errorf("AppendRecords: %d", err)
 		}
 		appendedRecords = append(appendedRecords, newRecord[0])
@@ -96,7 +96,7 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 // It returns the updated records.
 func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
 	err := p.login(ctx)
-	if err != nil {		
+	if err != nil {
 		return nil, fmt.Errorf("login: provider login failed: %d", err)
 	}
 
@@ -104,7 +104,7 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 
 	for _, record := range records {
 		setRecord, err := p.updateRecord(ctx, p.unFQDN(zone), record)
-		if err != nil {			
+		if err != nil {
 			return setRecords, fmt.Errorf("SetRecords: %d", err)
 		}
 		setRecords = append(setRecords, setRecord...)
@@ -116,7 +116,7 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 // DeleteRecords deletes the records from the zone. It returns the records that were deleted.
 func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
 	err := p.login(ctx)
-	if err != nil {		
+	if err != nil {
 		return nil, fmt.Errorf("login: provider login failed: %d", err)
 	}
 
@@ -124,7 +124,7 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 
 	for _, record := range records {
 		deletedRecord, err := p.removeRecord(ctx, p.unFQDN(zone), record)
-		if err != nil {			
+		if err != nil {
 			return deletedRecords, fmt.Errorf("DeleteRecords: %d", err)
 		}
 		deletedRecords = append(deletedRecords, deletedRecord...)
