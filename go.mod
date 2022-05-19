@@ -1,4 +1,4 @@
-module github.com/libdns/mythicbeasts-provider
+module github.com/libdns/mythicbeasts
 
 go 1.16
 

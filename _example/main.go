@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/libdns/libdns"
-	"github.com/libdns/mythicbeasts-provider"
+	"github.com/libdns/mythicbeasts"
 )
 
 func main() {
