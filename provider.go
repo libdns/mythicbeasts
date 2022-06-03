@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/libdns/libdns"
+	"golang.org/x/net/publicsuffix"
 )
 
 // Provider facilitates DNS record manipulation with Mythic Beasts.
@@ -36,7 +37,12 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 		return nil, fmt.Errorf("login: provider login failed: %d", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", apiURL+"/zones/"+p.unFQDN(zone)+"/records", nil)
+	formatedZone, err := publicsuffix.EffectiveTLDPlusOne(p.unFQDN(zone))
+	if err != nil {
+		return nil, fmt.Errorf("Provided zone string malformed %d", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL+"/zones/"+formatedZone+"/records", nil)
 	if err != nil {
 		return nil, fmt.Errorf("login: provider record request failed: %d", err)
 	}
@@ -79,10 +85,15 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 		return nil, fmt.Errorf("login: provider login failed: %d", err)
 	}
 
+	formatedZone, err := publicsuffix.EffectiveTLDPlusOne(p.unFQDN(zone))
+	if err != nil {
+		return nil, fmt.Errorf("Provided zone string malformed %d", err)
+	}
+
 	var appendedRecords []libdns.Record
 
 	for _, record := range records {
-		newRecord, err := p.addRecord(ctx, p.unFQDN(zone), record)
+		newRecord, err := p.addRecord(ctx, formatedZone, record)
 		if err != nil {
 			return nil, fmt.Errorf("AppendRecords: %d", err)
 		}
@@ -100,10 +111,15 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 		return nil, fmt.Errorf("login: provider login failed: %d", err)
 	}
 
+	formatedZone, err := publicsuffix.EffectiveTLDPlusOne(p.unFQDN(zone))
+	if err != nil {
+		return nil, fmt.Errorf("Provided zone string malformed %d", err)
+	}
+
 	var setRecords []libdns.Record
 
 	for _, record := range records {
-		setRecord, err := p.updateRecord(ctx, p.unFQDN(zone), record)
+		setRecord, err := p.updateRecord(ctx, formatedZone, record)
 		if err != nil {
 			return setRecords, fmt.Errorf("SetRecords: %d", err)
 		}
@@ -120,10 +136,15 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 		return nil, fmt.Errorf("login: provider login failed: %d", err)
 	}
 
+	formatedZone, err := publicsuffix.EffectiveTLDPlusOne(p.unFQDN(zone))
+	if err != nil {
+		return nil, fmt.Errorf("Provided zone string malformed %d", err)
+	}
+
 	var deletedRecords []libdns.Record
 
 	for _, record := range records {
-		deletedRecord, err := p.removeRecord(ctx, p.unFQDN(zone), record)
+		deletedRecord, err := p.removeRecord(ctx, formatedZone, record)
 		if err != nil {
 			return deletedRecords, fmt.Errorf("DeleteRecords: %d", err)
 		}
