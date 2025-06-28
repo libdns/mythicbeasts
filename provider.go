@@ -68,11 +68,11 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 	var records []libdns.Record
 
 	for _, r := range result.Records {
-		records = append(records, libdns.Record{
-			Type:  r.Type,
-			Name:  r.Name,
-			Value: r.Value,
-			TTL:   time.Duration(r.TTL) * time.Second,
+		records = append(records, libdns.RR{
+			Type: r.Type,
+			Name: r.Name,
+			Data: r.Value,
+			TTL:  time.Duration(r.TTL) * time.Second,
 		})
 	}
 	return records, nil

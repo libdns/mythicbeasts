@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/netip"
 	"time"
 
 	"github.com/libdns/libdns"
@@ -24,8 +25,8 @@ func main() {
 
 	// Append Records Test
 	recordsAdded, err := provider.AppendRecords(ctx, zone, []libdns.Record{
-		{Type: "A", Name: "test1", Value: "8.8.4.4", TTL: time.Duration(123) * time.Second},
-		{Type: "CNAME", Name: "test2", Value: "www.example.com.", TTL: time.Duration(666) * time.Second},
+		libdns.Address{Name: "test1", IP: netip.MustParseAddr("8.8.4.4"), TTL: time.Duration(123) * time.Second},
+		libdns.CNAME{Name: "test2", Target: "www.example.com.", TTL: time.Duration(666) * time.Second},
 	})
 	if err != nil {
 		fmt.Printf("ERROR: %s\n", err.Error())
@@ -33,9 +34,9 @@ func main() {
 
 	// Set Records Test
 	recordsSet, err := provider.SetRecords(ctx, zone, []libdns.Record{
-		{Type: "A", Name: "test1", Value: "8.8.8.8", TTL: time.Duration(999) * time.Second},
-		{Type: "CNAME", Name: "test2", Value: "test2.example.com", TTL: time.Duration(999) * time.Second},
-		{Type: "CNAME", Name: "test3", Value: "test3.example.net"},
+		libdns.Address{Name: "test1", IP: netip.MustParseAddr("8.8.8.8"), TTL: time.Duration(999) * time.Second},
+		libdns.CNAME{Name: "test2", Target: "test2.example.com", TTL: time.Duration(999) * time.Second},
+		libdns.CNAME{Name: "test3", Target: "test3.example.net"},
 	})
 	if err != nil {
 		fmt.Printf("ERROR: %s\n", err.Error())
@@ -43,8 +44,8 @@ func main() {
 
 	// Delete Records Test
 	recordsDeleted, err := provider.DeleteRecords(ctx, zone, []libdns.Record{
-		{Type: "A", Name: "test1"},
-		{Type: "CNAME", Name: "test2"},
+		libdns.Address{Name: "test1"},
+		libdns.CNAME{Name: "test2"},
 	})
 	if err != nil {
 		fmt.Printf("ERROR: %s\n", err.Error())
