@@ -93,9 +93,9 @@ func (p *Provider) addRecord(ctx context.Context, zone string, record libdns.Rec
 
 	var addedRecords []libdns.Record
 
-	rr := record.RR()
+	//rr := record.RR()
 	data := mythicRecords{}
-	data.Records = append(data.Records, mythicRecord{Type: rr.Type, Name: rr.Name, Value: rr.Data, TTL: int(rr.TTL.Seconds())})
+	//data.Records = append(data.Records, mythicRecord{Type: rr.Type, Name: rr.Name, Value: rr.Data, TTL: int(rr.TTL.Seconds())})
 
 	payload, err := json.Marshal(data)
 	if err != nil {
@@ -159,7 +159,7 @@ func (p *Provider) updateRecord(ctx context.Context, zone string, record libdns.
 
 	rr := record.RR()
 	data := mythicRecords{}
-	data.Records = append(data.Records, mythicRecord{Type: rr.Type, Name: rr.Name, Value: rr.Data, TTL: int(rr.TTL.Seconds())})
+	//data.Records = append(data.Records, mythicRecord{Type: rr.Type, Name: rr.Name, Value: rr.Data, TTL: int(rr.TTL.Seconds())})
 
 	payload, err := json.Marshal(data)
 
@@ -232,7 +232,7 @@ func (p *Provider) removeRecord(ctx context.Context, zone string, record libdns.
 
 	rr := record.RR()
 	data := mythicRecords{}
-	data.Records = append(data.Records, mythicRecord{Type: rr.Type, Name: rr.Name, Value: rr.Data, TTL: int(rr.TTL.Seconds())})
+	//data.Records = append(data.Records, mythicRecord{Type: rr.Type, Name: rr.Name, Value: rr.Data, TTL: int(rr.TTL.Seconds())})
 
 	payload, err := json.Marshal(data)
 	if err != nil {
