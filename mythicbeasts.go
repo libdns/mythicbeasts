@@ -2,7 +2,6 @@ package mythicbeasts
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -81,7 +80,7 @@ func (mrl *mythicRecords) UnmarshalJSON(data []byte) error {
 		var base mythicRecord
 
 		if err := json.Unmarshal(rawRecord, &base); err != nil {
-			fmt.Errorf("failed to unmarshal base fields for item %d: %w", r, err)
+			return fmt.Errorf("failed to unmarshal base fields for item %d: %w", r, err)
 		}
 
 		switch base.Type {
@@ -104,8 +103,33 @@ func (mrl *mythicRecords) UnmarshalJSON(data []byte) error {
 
 	return nil
 }
-func (mrl *mythicRecords) FromLibdns(libdnsrecords []libdns.RR) error {
-	return errors.New("not implemented")
+func (mrl *mythicRecords) FromLibdns(libdnsrecords []libdns.Record) error {
+	for _, record := range libdnsrecords {
+		var rr = record.RR()
+
+		var mr mythicRecord
+		mr.Type = rr.Type
+		mr.Name = rr.Name
+		mr.Value = rr.Data
+		mr.TTL = int(rr.TTL.Seconds())
+
+		switch r := record.(type) {
+		case libdns.Address, libdns.CNAME, libdns.NS, libdns.TXT, libdns.RR:
+			mrl.Records = append(mrl.Records, mr)
+		case libdns.MX:
+			var mxr mythicMxRecord
+			mxr = mythicMxRecord{
+				mythicRecord: mr,
+				Priority:     r.Preference,
+			}
+			mxr.Value = r.Target
+			mrl.Records = append(mrl.Records, mxr)
+		default:
+			return fmt.Errorf("FromLibdns: unknown record type %T", r)
+		}
+	}
+
+	return nil
 }
 
 type mythicRecordUpdate struct {

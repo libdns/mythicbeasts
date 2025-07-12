@@ -93,9 +93,11 @@ func (p *Provider) addRecord(ctx context.Context, zone string, record libdns.Rec
 
 	var addedRecords []libdns.Record
 
-	//rr := record.RR()
 	data := mythicRecords{}
-	//data.Records = append(data.Records, mythicRecord{Type: rr.Type, Name: rr.Name, Value: rr.Data, TTL: int(rr.TTL.Seconds())})
+	var err = data.FromLibdns([]libdns.Record{record})
+	if err != nil {
+		return nil, fmt.Errorf("addRecord: Error converting libdns record to mythic record: %s", err.Error())
+	}
 
 	payload, err := json.Marshal(data)
 	if err != nil {
@@ -113,7 +115,7 @@ func (p *Provider) addRecord(ctx context.Context, zone string, record libdns.Rec
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("addRecord: Error creating JSON payload: %s", err.Error())
+		return nil, fmt.Errorf("addRecord: Error making HTTP request: %s", err.Error())
 	}
 	defer func(Body io.ReadCloser) {
 		_ = Body.Close()
