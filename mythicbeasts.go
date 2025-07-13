@@ -21,6 +21,7 @@ type mythicAuthResponseError struct {
 
 type mythicRecordType interface {
 	GetName() string
+	GetType() string
 	GetLibdnsRecord() (libdns.Record, error)
 }
 
@@ -33,6 +34,9 @@ type mythicRecord struct {
 
 func (r mythicRecord) GetName() string {
 	return r.Name
+}
+func (r mythicRecord) GetType() string {
+	return r.Type
 }
 func (r mythicRecord) GetLibdnsRecord() (libdns.Record, error) {
 	return libdns.RR{
@@ -50,6 +54,9 @@ type mythicMxRecord struct {
 
 func (r mythicMxRecord) GetName() string {
 	return r.Name
+}
+func (r mythicMxRecord) GetType() string {
+	return r.Type
 }
 func (r mythicMxRecord) GetLibdnsRecord() (libdns.Record, error) {
 	return libdns.MX{

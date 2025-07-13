@@ -42,9 +42,11 @@ func main() {
 
 	// Set Records Test
 	recordsSet, err := provider.SetRecords(ctx, zone, []libdns.Record{
-		libdns.Address{Name: "test1", IP: netip.MustParseAddr("8.8.8.8"), TTL: time.Duration(999) * time.Second},
-		libdns.CNAME{Name: "test2", Target: "test2.example.com", TTL: time.Duration(999) * time.Second},
-		libdns.CNAME{Name: "test3", Target: "test3.example.net"},
+		libdns.Address{Name: "settest1", IP: netip.MustParseAddr("8.8.8.8"), TTL: time.Duration(999) * time.Second},
+		libdns.CNAME{Name: "settest2", Target: "test2.example.com", TTL: time.Duration(999) * time.Second},
+		libdns.CNAME{Name: "settest3", Target: "test3.example.net"},
+		libdns.MX{Name: "settest4", Target: "mail3.example.com.", Preference: 5, TTL: time.Duration(999) * time.Second},
+		libdns.MX{Name: "settest5", Target: "mail4.example.com.", Preference: 8, TTL: time.Duration(999) * time.Second},
 	})
 	if err != nil {
 		fmt.Printf("ERROR: %s\n", err.Error())
@@ -52,8 +54,8 @@ func main() {
 
 	// Delete Records Test
 	recordsDeleted, err := provider.DeleteRecords(ctx, zone, []libdns.Record{
-		libdns.Address{Name: "test1"},
-		libdns.CNAME{Name: "test2"},
+		libdns.Address{Name: "settest1"},
+		libdns.CNAME{Name: "settest2"},
 	})
 	if err != nil {
 		fmt.Printf("ERROR: %s\n", err.Error())
