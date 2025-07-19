@@ -61,7 +61,11 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 
 	result := mythicRecords{}
 
-	result.UnmarshalJSON(body)
+	err = result.UnmarshalJSON(body)
+	if err != nil {
+		return nil, fmt.Errorf("GetRecords: failed to unmarshal response: %d", err)
+	}
+
 	var records []libdns.Record
 
 	for _, r := range result.Records {
