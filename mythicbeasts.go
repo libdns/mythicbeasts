@@ -3,6 +3,7 @@ package mythicbeasts
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/libdns/libdns"
@@ -67,6 +68,55 @@ func (r mythicMxRecord) GetLibdnsRecord() (libdns.Record, error) {
 	}, nil
 }
 
+type mythicCaaRecord struct {
+	mythicRecord
+	Flags uint8  `json:"caa_flags,omitempty"`
+	Tag   string `json:"caa_tag,omitempty"`
+}
+
+func (r mythicCaaRecord) GetName() string {
+	return r.Name
+}
+func (r mythicCaaRecord) GetType() string {
+	return r.Type
+}
+func (r mythicCaaRecord) GetLibdnsRecord() (libdns.Record, error) {
+	return libdns.CAA{
+		Name:  r.Name,
+		TTL:   time.Duration(r.TTL) * time.Second,
+		Flags: r.Flags,
+		Tag:   r.Tag,
+		Value: r.Value,
+	}, nil
+}
+
+type mythicSrvRecord struct {
+	mythicRecord
+	Priority uint16 `json:"srv_priority,omitempty"`
+	Weight   uint16 `json:"srv_weight,omitempty"`
+	Port     uint16 `json:"srv_port,omitempty"`
+}
+
+func (r mythicSrvRecord) GetName() string {
+	return r.Name
+}
+func (r mythicSrvRecord) GetType() string {
+	return r.Type
+}
+func (r mythicSrvRecord) GetLibdnsRecord() (libdns.Record, error) {
+	nameParts := strings.Split(r.Name, ".")
+	return libdns.SRV{
+		Service:   strings.TrimPrefix(nameParts[0], "_"),
+		Transport: strings.TrimPrefix(nameParts[1], "_"),
+		Name:      nameParts[2],
+		TTL:       time.Duration(r.TTL) * time.Second,
+		Priority:  r.Priority,
+		Weight:    r.Weight,
+		Port:      r.Port,
+		Target:    r.Value,
+	}, nil
+}
+
 type mythicRecords struct {
 	Records []mythicRecordType `json:"records,omitempty"`
 }
@@ -103,6 +153,18 @@ func (mrl *mythicRecords) UnmarshalJSON(data []byte) error {
 				return fmt.Errorf("failed to unmarshal MX record: %v", err)
 			}
 			mrl.Records[r] = mxRecord
+		case "CAA":
+			var caaRecord mythicCaaRecord
+			if err := json.Unmarshal(rawRecord, &caaRecord); err != nil {
+				return fmt.Errorf("failed to unmarshal CAA record: %v", err)
+			}
+			mrl.Records[r] = caaRecord
+		case "SRV":
+			var srvRecord mythicSrvRecord
+			if err := json.Unmarshal(rawRecord, &srvRecord); err != nil {
+				return fmt.Errorf("failed to unmarshal SRV record: %v", err)
+			}
+			mrl.Records[r] = srvRecord
 		default:
 			return fmt.Errorf("unknown type: %s", base.Type)
 		}
@@ -131,6 +193,26 @@ func (mrl *mythicRecords) FromLibdns(libdnsrecords []libdns.Record) error {
 			}
 			mxr.Value = r.Target
 			mrl.Records = append(mrl.Records, mxr)
+		case libdns.CAA:
+			var caar mythicCaaRecord
+			caar = mythicCaaRecord{
+				mythicRecord: mr,
+				Flags:        r.Flags,
+				Tag:          r.Tag,
+			}
+			caar.Value = r.Value
+			mrl.Records = append(mrl.Records, caar)
+		case libdns.SRV:
+			var srvr mythicSrvRecord
+			srvr = mythicSrvRecord{
+				mythicRecord: mr,
+				Priority:     r.Priority,
+				Weight:       r.Weight,
+				Port:         r.Port,
+			}
+			srvr.Name = fmt.Sprintf("_%s._%s.%s", r.Service, r.Transport, r.Name)
+			srvr.Value = r.Target
+			mrl.Records = append(mrl.Records, srvr)
 		default:
 			return fmt.Errorf("FromLibdns: unknown record type %T", r)
 		}
