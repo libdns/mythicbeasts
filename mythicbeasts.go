@@ -3,6 +3,7 @@ package mythicbeasts
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -117,6 +118,27 @@ func (r mythicSrvRecord) GetLibdnsRecord() (libdns.Record, error) {
 	}, nil
 }
 
+type mythicSshfpRecord struct {
+	mythicRecord
+	Algorithm uint8 `json:"sshfp_algorithm,omitempty"`
+	SshfpType uint8 `json:"sshfp_type,omitempty"`
+}
+
+func (r mythicSshfpRecord) GetName() string {
+	return r.Name
+}
+func (r mythicSshfpRecord) GetType() string {
+	return r.Type
+}
+func (r mythicSshfpRecord) GetLibdnsRecord() (libdns.Record, error) {
+	return libdns.RR{
+		Name: r.Name,
+		TTL:  time.Duration(r.TTL) * time.Second,
+		Type: "SSHFP",
+		Data: fmt.Sprintf("%d %d %s", r.Algorithm, r.SshfpType, r.Value),
+	}, nil
+}
+
 type mythicRecords struct {
 	Records []mythicRecordType `json:"records,omitempty"`
 }
@@ -141,12 +163,12 @@ func (mrl *mythicRecords) UnmarshalJSON(data []byte) error {
 		}
 
 		switch base.Type {
-		case "A", "AAAA", "ANAME", "CNAME", "DNAME", "NS", "PTR", "TXT":
-			var record mythicRecord
-			if err := json.Unmarshal(rawRecord, &record); err != nil {
-				return fmt.Errorf("failed to unmarshal record of type %s: %v", base.Type, err)
-			}
-			mrl.Records[r] = record
+		case "A", "AAAA", "CNAME", "NS", "PTR", "TXT":
+			mrl.Records[r] = base
+		case "ANAME", "DNAME": // Unoffical types
+			mrl.Records[r] = base
+		case "TLSA": // Offical types, but not supported by libdns
+			mrl.Records[r] = base
 		case "MX":
 			var mxRecord mythicMxRecord
 			if err := json.Unmarshal(rawRecord, &mxRecord); err != nil {
@@ -165,6 +187,12 @@ func (mrl *mythicRecords) UnmarshalJSON(data []byte) error {
 				return fmt.Errorf("failed to unmarshal SRV record: %v", err)
 			}
 			mrl.Records[r] = srvRecord
+		case "SSHFP":
+			var sshfpRecord mythicSshfpRecord
+			if err := json.Unmarshal(rawRecord, &sshfpRecord); err != nil {
+				return fmt.Errorf("failed to unmarshal SSHFP record: %v", err)
+			}
+			mrl.Records[r] = sshfpRecord
 		default:
 			return fmt.Errorf("unknown type: %s", base.Type)
 		}
@@ -183,8 +211,30 @@ func (mrl *mythicRecords) FromLibdns(libdnsrecords []libdns.Record) error {
 		mr.TTL = int(rr.TTL.Seconds())
 
 		switch r := record.(type) {
-		case libdns.Address, libdns.CNAME, libdns.NS, libdns.TXT, libdns.RR:
+		case libdns.Address, libdns.CNAME, libdns.NS, libdns.TXT:
 			mrl.Records = append(mrl.Records, mr)
+		case libdns.RR:
+			if rr.Type == "SSHFP" {
+				valueParts := strings.Split(rr.Data, " ")
+				algorithm, err := strconv.ParseUint(valueParts[0], 10, 8)
+				if err != nil {
+					return fmt.Errorf("FromLibdns: failed to parse SSHFP algorithm: %w", err)
+				}
+				sshfptype, err := strconv.ParseUint(valueParts[1], 10, 8)
+				if err != nil {
+					return fmt.Errorf("FromLibdns: failed to parse SSHFP type: %w", err)
+				}
+				sshfp := mythicSshfpRecord{
+					mythicRecord: mr,
+					Algorithm:    uint8(algorithm),
+					SshfpType:    uint8(sshfptype),
+				}
+				sshfp.Value = valueParts[2]
+				mrl.Records = append(mrl.Records, sshfp)
+				continue
+			} else {
+				mrl.Records = append(mrl.Records, mr)
+			}
 		case libdns.MX:
 			var mxr mythicMxRecord
 			mxr = mythicMxRecord{

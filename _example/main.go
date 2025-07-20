@@ -37,6 +37,7 @@ func main() {
 		libdns.MX{Name: "appendtest10", Target: "mail2.example.com.", Preference: 20, TTL: time.Duration(999) * time.Second},
 		libdns.CAA{Name: "appendtest11", Flags: 128, Tag: "issue", Value: "letsencrypt.org", TTL: time.Duration(999) * time.Second},
 		libdns.SRV{Service: "sip", Transport: "tcp", Name: "appendtest12", Target: "srv.example.com.", Port: 443, Priority: 10, Weight: 5, TTL: time.Duration(999) * time.Second},
+		libdns.RR{Name: "appendtest13", Type: "SSHFP", Data: "3 2 abc1234abc", TTL: time.Duration(999) * time.Second},
 	})
 	if err != nil {
 		fmt.Printf("ERROR: %s\n", err.Error())
