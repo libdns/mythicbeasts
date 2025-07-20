@@ -139,6 +139,28 @@ func (r mythicSshfpRecord) GetLibdnsRecord() (libdns.Record, error) {
 	}, nil
 }
 
+type mythicTlsaRecord struct {
+	mythicRecord
+	Usage    uint8 `json:"tlsa_usage,omitempty"`
+	Selector uint8 `json:"tlsa_selector,omitempty"`
+	Matching uint8 `json:"tlsa_matching,omitempty"`
+}
+
+func (r mythicTlsaRecord) GetName() string {
+	return r.Name
+}
+func (r mythicTlsaRecord) GetType() string {
+	return r.Type
+}
+func (r mythicTlsaRecord) GetLibdnsRecord() (libdns.Record, error) {
+	return libdns.RR{
+		Name: r.Name,
+		TTL:  time.Duration(r.TTL) * time.Second,
+		Type: "TLSA",
+		Data: fmt.Sprintf("%d %d %d %s", r.Usage, r.Selector, r.Matching, r.Value),
+	}, nil
+}
+
 type mythicRecords struct {
 	Records []mythicRecordType `json:"records,omitempty"`
 }
@@ -167,8 +189,6 @@ func (mrl *mythicRecords) UnmarshalJSON(data []byte) error {
 			mrl.Records[r] = base
 		case "ANAME", "DNAME": // Unoffical types
 			mrl.Records[r] = base
-		case "TLSA": // Offical types, but not supported by libdns
-			mrl.Records[r] = base
 		case "MX":
 			var mxRecord mythicMxRecord
 			if err := json.Unmarshal(rawRecord, &mxRecord); err != nil {
@@ -193,6 +213,12 @@ func (mrl *mythicRecords) UnmarshalJSON(data []byte) error {
 				return fmt.Errorf("failed to unmarshal SSHFP record: %v", err)
 			}
 			mrl.Records[r] = sshfpRecord
+		case "TLSA":
+			var tlsaRecord mythicTlsaRecord
+			if err := json.Unmarshal(rawRecord, &tlsaRecord); err != nil {
+				return fmt.Errorf("failed to unmarshal TLSA record: %v", err)
+			}
+			mrl.Records[r] = tlsaRecord
 		default:
 			return fmt.Errorf("unknown type: %s", base.Type)
 		}
@@ -231,6 +257,29 @@ func (mrl *mythicRecords) FromLibdns(libdnsrecords []libdns.Record) error {
 				}
 				sshfp.Value = valueParts[2]
 				mrl.Records = append(mrl.Records, sshfp)
+				continue
+			} else if rr.Type == "TLSA" {
+				valueParts := strings.Split(rr.Data, " ")
+				usage, err := strconv.ParseUint(valueParts[0], 10, 8)
+				if err != nil {
+					return fmt.Errorf("FromLibdns: failed to parse TLSA usage: %w", err)
+				}
+				selector, err := strconv.ParseUint(valueParts[1], 10, 8)
+				if err != nil {
+					return fmt.Errorf("FromLibdns: failed to parse TLSA selector: %w", err)
+				}
+				matching, err := strconv.ParseUint(valueParts[2], 10, 8)
+				if err != nil {
+					return fmt.Errorf("FromLibdns: failed to parse TLSA matching: %w", err)
+				}
+				tlsa := mythicTlsaRecord{
+					mythicRecord: mr,
+					Usage:        uint8(usage),
+					Selector:     uint8(selector),
+					Matching:     uint8(matching),
+				}
+				tlsa.Value = valueParts[3]
+				mrl.Records = append(mrl.Records, tlsa)
 				continue
 			} else {
 				mrl.Records = append(mrl.Records, mr)
