@@ -2,14 +2,12 @@ package mythicbeasts
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/libdns/libdns"
 	"golang.org/x/net/publicsuffix"
@@ -62,20 +60,18 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 	}
 
 	result := mythicRecords{}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("login: failed to extract JSON data: %d", err)
+
+	err = result.UnmarshalJSON(body)
+	if err != nil {
+		return nil, fmt.Errorf("GetRecords: failed to unmarshal response: %d", err)
 	}
+
 	var records []libdns.Record
 
 	for _, r := range result.Records {
-		record, err := libdns.RR{
-			Type: r.Type,
-			Name: r.Name,
-			Data: r.Value,
-			TTL:  time.Duration(r.TTL) * time.Second,
-		}.Parse()
+		record, err := r.GetLibdnsRecord()
 		if err != nil {
-			return nil, fmt.Errorf("GetRecords: failed to parse record %s: %d", r.Name, err)
+			return nil, fmt.Errorf("GetRecords: failed to parse record %s: %d", r.GetName(), err)
 		}
 
 		records = append(records, record)

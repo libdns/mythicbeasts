@@ -93,9 +93,11 @@ func (p *Provider) addRecord(ctx context.Context, zone string, record libdns.Rec
 
 	var addedRecords []libdns.Record
 
-	rr := record.RR()
 	data := mythicRecords{}
-	data.Records = append(data.Records, mythicRecord{Type: rr.Type, Name: rr.Name, Value: rr.Data, TTL: int(rr.TTL.Seconds())})
+	var err = data.FromLibdns([]libdns.Record{record})
+	if err != nil {
+		return nil, fmt.Errorf("addRecord: Error converting libdns record to mythic record: %s", err.Error())
+	}
 
 	payload, err := json.Marshal(data)
 	if err != nil {
@@ -113,7 +115,7 @@ func (p *Provider) addRecord(ctx context.Context, zone string, record libdns.Rec
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("addRecord: Error creating JSON payload: %s", err.Error())
+		return nil, fmt.Errorf("addRecord: Error making HTTP request: %s", err.Error())
 	}
 	defer func(Body io.ReadCloser) {
 		_ = Body.Close()
@@ -157,9 +159,11 @@ func (p *Provider) updateRecord(ctx context.Context, zone string, record libdns.
 
 	var updatedRecords []libdns.Record
 
-	rr := record.RR()
 	data := mythicRecords{}
-	data.Records = append(data.Records, mythicRecord{Type: rr.Type, Name: rr.Name, Value: rr.Data, TTL: int(rr.TTL.Seconds())})
+	var err = data.FromLibdns([]libdns.Record{record})
+	if err != nil {
+		return nil, fmt.Errorf("updateRecord: Error converting libdns record to mythic record: %s", err.Error())
+	}
 
 	payload, err := json.Marshal(data)
 
@@ -173,8 +177,8 @@ func (p *Provider) updateRecord(ctx context.Context, zone string, record libdns.
 		"/zones/"+
 		zone+
 		"/records/"+
-		rr.Name+"/"+
-		rr.Type+
+		data.Records[0].GetName()+"/"+
+		data.Records[0].GetType()+
 		"?exclude-template&exclude-generated", body)
 	if err != nil {
 		return nil, fmt.Errorf("addRecord: Error in NewRequestWithContext: %s", err.Error())
@@ -186,7 +190,7 @@ func (p *Provider) updateRecord(ctx context.Context, zone string, record libdns.
 	resp, err := http.DefaultClient.Do(req)
 
 	if err != nil {
-		return nil, fmt.Errorf("updateRecord: Error creating JSON payload: %s", err.Error())
+		return nil, fmt.Errorf("updateRecord: Error making HTTP request: %s", err.Error())
 	}
 	defer func(Body io.ReadCloser) {
 		_ = Body.Close()
@@ -230,23 +234,19 @@ func (p *Provider) removeRecord(ctx context.Context, zone string, record libdns.
 
 	var removedRecords []libdns.Record
 
-	rr := record.RR()
 	data := mythicRecords{}
-	data.Records = append(data.Records, mythicRecord{Type: rr.Type, Name: rr.Name, Value: rr.Data, TTL: int(rr.TTL.Seconds())})
-
-	payload, err := json.Marshal(data)
+	var err = data.FromLibdns([]libdns.Record{record})
 	if err != nil {
-		return nil, fmt.Errorf("removeRecord: Error creating JSON payload: %s", err.Error())
+		return nil, fmt.Errorf("removeRecord: Error converting libdns record to mythic record: %s", err.Error())
 	}
 
-	body := bytes.NewReader(payload)
 	req, err := http.NewRequestWithContext(ctx, "DELETE", apiURL+
 		"/zones/"+
 		zone+
 		"/records/"+
-		rr.Name+"/"+
-		rr.Type+
-		"?exclude-template&exclude-generated", body)
+		data.Records[0].GetName()+"/"+
+		data.Records[0].GetType()+
+		"?exclude-template&exclude-generated", nil)
 	if err != nil {
 		return nil, fmt.Errorf("addRecord: Error in NewRequestWithContext: %s", err.Error())
 	}
@@ -256,7 +256,7 @@ func (p *Provider) removeRecord(ctx context.Context, zone string, record libdns.
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("removeRecord: Error creating JSON payload: %s", err.Error())
+		return nil, fmt.Errorf("removeRecord: Error making HTTP request: %s", err.Error())
 	}
 	defer func(Body io.ReadCloser) {
 		_ = Body.Close()
