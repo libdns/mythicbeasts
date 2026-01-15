@@ -91,14 +91,10 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 		return nil, fmt.Errorf("Provided zone string malformed %d", err)
 	}
 
-	var appendedRecords []libdns.Record
-
-	for _, record := range records {
-		newRecord, err := p.addRecord(ctx, formatedZone, record)
-		if err != nil {
-			return nil, fmt.Errorf("AppendRecords: %d", err)
-		}
-		appendedRecords = append(appendedRecords, newRecord[0])
+	// Batch add records
+	appendedRecords, err := p.addRecords(ctx, formatedZone, records)
+	if err != nil {
+		return nil, fmt.Errorf("AppendRecords: %d", err)
 	}
 
 	return appendedRecords, nil
@@ -117,17 +113,12 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 		return nil, fmt.Errorf("Provided zone string malformed %d", err)
 	}
 
-	var setRecords []libdns.Record
-
-	for _, record := range records {
-		setRecord, err := p.updateRecord(ctx, formatedZone, record)
-		if err != nil {
-			return setRecords, fmt.Errorf("SetRecords: %d", err)
-		}
-		setRecords = append(setRecords, setRecord...)
+	// Atomic set records
+	setRecord, err := p.setRecordsAtomic(ctx, formatedZone, records)
+	if err != nil {
+		return nil, fmt.Errorf("SetRecords: %d", err)
 	}
-
-	return setRecords, nil
+	return setRecord, nil
 }
 
 // DeleteRecords deletes the records from the zone. It returns the records that were deleted.
