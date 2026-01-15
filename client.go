@@ -14,7 +14,7 @@ import (
 	"github.com/libdns/libdns"
 )
 
-const (
+var (
 	apiURL  = "https://api.mythic-beasts.com/dns/v2"
 	authURL = "https://auth.mythic-beasts.com/login"
 )
@@ -87,145 +87,141 @@ func (p *Provider) login(ctx context.Context) error {
 	return nil
 }
 
-func (p *Provider) addRecord(ctx context.Context, zone string, record libdns.Record) ([]libdns.Record, error) {
+// doAPIRequest handles the common logic for making authenticated API requests
+func (p *Provider) doAPIRequest(ctx context.Context, method, url string, body io.Reader) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	if err != nil {
+		return nil, fmt.Errorf("NewRequestWithContext: %s", err.Error())
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+p.token.Token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("http.DefaultClient.Do: %s", err.Error())
+	}
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("ioutil.ReadAll: %w", err)
+	}
+
+	if resp.StatusCode != 200 {
+		errResp := &mythicError{}
+		errorsResp := &mythicErrors{}
+
+		err := json.Unmarshal(respBody, errorsResp)
+		if err != nil {
+			err := json.Unmarshal(respBody, errResp)
+			if err != nil {
+				return nil, fmt.Errorf("api error: %d", resp.StatusCode)
+			}
+			return nil, fmt.Errorf("%d: %s", resp.StatusCode, errResp.Error)
+		}
+		return nil, fmt.Errorf("%d: %s", resp.StatusCode, errorsResp.Errors)
+	}
+
+	return respBody, nil
+}
+
+func (p *Provider) addRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
 	var addedRecords []libdns.Record
 
 	data := mythicRecords{}
-	var err = data.FromLibdns([]libdns.Record{record})
+	var err = data.FromLibdns(records)
 	if err != nil {
-		return nil, fmt.Errorf("addRecord: Error converting libdns record to mythic record: %s", err.Error())
+		return nil, fmt.Errorf("addRecords: Error converting libdns record to mythic record: %s", err.Error())
 	}
 
 	payload, err := json.Marshal(data)
 	if err != nil {
-		return nil, fmt.Errorf("addRecord: Error creating JSON payload: %s", err.Error())
+		return nil, fmt.Errorf("addRecords: Error creating JSON payload: %s", err.Error())
 	}
 
-	body := bytes.NewReader(payload)
-	req, err := http.NewRequestWithContext(ctx, "POST", apiURL+"/zones/"+zone+"/records", body)
+	respBody, err := p.doAPIRequest(ctx, "POST", apiURL+"/zones/"+zone+"/records", bytes.NewReader(payload))
 	if err != nil {
-		return nil, fmt.Errorf("addRecord: Error in NewRequestWithContext: %s", err.Error())
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.token.Token)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("addRecord: Error making HTTP request: %s", err.Error())
-	}
-	defer func(Body io.ReadCloser) {
-		_ = Body.Close()
-	}(resp.Body)
-
-	respBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("addRecord: Failed %w", err)
-	}
-
-	if resp.StatusCode != 200 {
-		errResp := &mythicError{}
-		errorsResp := &mythicErrors{}
-
-		err := json.Unmarshal(respBody, errorsResp)
-		if err != nil {
-			err := json.Unmarshal(respBody, errResp)
-			if err != nil {
-				return nil, fmt.Errorf("addRecord: unknown error: %d", resp.StatusCode)
-			}
-			return nil, fmt.Errorf("addRecord: %d: %s", resp.StatusCode, errResp.Error)
-		}
-		return nil, fmt.Errorf("addRecord: %d: %s", resp.StatusCode, errorsResp.Errors)
+		return nil, fmt.Errorf("addRecords: %w", err)
 	}
 
 	appendResp := mythicRecordUpdate{}
 	err = json.Unmarshal(respBody, &appendResp)
 	if err != nil {
-		return nil, fmt.Errorf("addRecord: error parsing response: %w", err)
+		return nil, fmt.Errorf("addRecords: error parsing response: %w", err)
 	}
 
-	if appendResp.RecordsAdded == 1 {
-		addedRecords = append(addedRecords, record)
-	}
+	// Assuming all were added if successful.
+	addedRecords = append(addedRecords, records...)
 	return addedRecords, nil
 }
 
-func (p *Provider) updateRecord(ctx context.Context, zone string, record libdns.Record) ([]libdns.Record, error) {
+func (p *Provider) setRecordsAtomic(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
-	var updatedRecords []libdns.Record
+	var setRecords []libdns.Record
+
+	if len(records) == 0 {
+		return setRecords, nil
+	}
 
 	data := mythicRecords{}
-	var err = data.FromLibdns([]libdns.Record{record})
+	var err = data.FromLibdns(records)
 	if err != nil {
-		return nil, fmt.Errorf("updateRecord: Error converting libdns record to mythic record: %s", err.Error())
+		return nil, fmt.Errorf("setRecordsAtomic: Error converting libdns records to mythic records: %s", err.Error())
 	}
 
 	payload, err := json.Marshal(data)
-
 	if err != nil {
-		return nil, fmt.Errorf("updateRecord: Error creating JSON payload: %s", err.Error())
+		return nil, fmt.Errorf("setRecordsAtomic: Error creating JSON payload: %s", err.Error())
 	}
 
-	body := bytes.NewReader(payload)
+	// Build query parameters for atomic replacement
+	// We need to select all host/type pairs being set.
+	values := url.Values{}
+	seen := make(map[string]bool)
 
-	req, err := http.NewRequestWithContext(ctx, "PUT", apiURL+
-		"/zones/"+
-		zone+
-		"/records/"+
-		data.Records[0].GetName()+"/"+
-		data.Records[0].GetType()+
-		"?exclude-template&exclude-generated", body)
-	if err != nil {
-		return nil, fmt.Errorf("addRecord: Error in NewRequestWithContext: %s", err.Error())
-	}
+	for _, rec := range records {
+		rr := rec.RR()
+		// Determine host relative to zone.
+		// SetRecords guarantees Name is relative to zone.
+		host := rr.Name
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.token.Token)
-
-	resp, err := http.DefaultClient.Do(req)
-
-	if err != nil {
-		return nil, fmt.Errorf("updateRecord: Error making HTTP request: %s", err.Error())
-	}
-	defer func(Body io.ReadCloser) {
-		_ = Body.Close()
-	}(resp.Body)
-
-	respBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("updateRecord: Failed %w", err)
-	}
-
-	if resp.StatusCode != 200 {
-		errResp := &mythicError{}
-		errorsResp := &mythicErrors{}
-
-		err := json.Unmarshal(respBody, errorsResp)
-		if err != nil {
-			err := json.Unmarshal(respBody, errResp)
-			if err != nil {
-				return nil, fmt.Errorf("updateRecord: unknown error: %d", resp.StatusCode)
-			}
-			return nil, fmt.Errorf("updateRecord: %d: %s", resp.StatusCode, errResp.Error)
+		key := host + "|" + rr.Type
+		if seen[key] {
+			continue
 		}
-		return nil, fmt.Errorf("updateRecord: %d: %s", resp.StatusCode, errorsResp.Errors)
+		seen[key] = true
+
+		if host == "" || host == "@" {
+			host = "@"
+		}
+
+		val := fmt.Sprintf("host=%s&type=%s", host, rr.Type)
+		values.Add("select", val)
+	}
+
+	reqURL := apiURL + "/zones/" + zone + "/records?" + values.Encode()
+
+	respBody, err := p.doAPIRequest(ctx, "PUT", reqURL, bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("setRecordsAtomic: %w", err)
 	}
 
 	appendResp := mythicRecordUpdate{}
 	err = json.Unmarshal(respBody, &appendResp)
 	if err != nil {
-		return nil, fmt.Errorf("updateRecord: error parsing response: %w", err)
+		return nil, fmt.Errorf("setRecordsAtomic: error parsing response: %w", err)
 	}
 
-	if appendResp.RecordsAdded == 1 {
-		updatedRecords = append(updatedRecords, record)
-	}
-	return updatedRecords, nil
+	setRecords = append(setRecords, records...)
+	return setRecords, nil
 }
 
 func (p *Provider) removeRecord(ctx context.Context, zone string, record libdns.Record) ([]libdns.Record, error) {
@@ -240,46 +236,14 @@ func (p *Provider) removeRecord(ctx context.Context, zone string, record libdns.
 		return nil, fmt.Errorf("removeRecord: Error converting libdns record to mythic record: %s", err.Error())
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "DELETE", apiURL+
-		"/zones/"+
-		zone+
-		"/records/"+
-		data.Records[0].GetName()+"/"+
-		data.Records[0].GetType()+
-		"?exclude-template&exclude-generated", nil)
+	reqURL := apiURL + "/zones/" + zone + "/records/" +
+		data.Records[0].GetName() + "/" +
+		data.Records[0].GetType() +
+		"?exclude-template&exclude-generated"
+
+	respBody, err := p.doAPIRequest(ctx, "DELETE", reqURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("addRecord: Error in NewRequestWithContext: %s", err.Error())
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.token.Token)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("removeRecord: Error making HTTP request: %s", err.Error())
-	}
-	defer func(Body io.ReadCloser) {
-		_ = Body.Close()
-	}(resp.Body)
-
-	respBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("removeRecord: Failed %w", err)
-	}
-
-	if resp.StatusCode != 200 {
-		errResp := &mythicError{}
-		errorsResp := &mythicErrors{}
-
-		err := json.Unmarshal(respBody, errorsResp)
-		if err != nil {
-			err := json.Unmarshal(respBody, errResp)
-			if err != nil {
-				return nil, fmt.Errorf("removeRecord: unknown error: %d", resp.StatusCode)
-			}
-			return nil, fmt.Errorf("removeRecord: %d: %s", resp.StatusCode, errResp.Error)
-		}
-		return nil, fmt.Errorf("removeRecord: %d: %s", resp.StatusCode, errorsResp.Errors)
+		return nil, fmt.Errorf("removeRecord: %w", err)
 	}
 
 	appendResp := mythicRecordUpdate{}

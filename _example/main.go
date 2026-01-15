@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"os"
 	"time"
 
 	"github.com/libdns/libdns"
@@ -11,19 +12,36 @@ import (
 )
 
 func main() {
+	keyID := os.Getenv("MYTHIC_KEY_ID")
+	secret := os.Getenv("MYTHIC_SECRET")
+	zone := os.Getenv("MYTHIC_ZONE")
+
+	if keyID == "" || secret == "" {
+		fmt.Println("Please set MYTHIC_KEY_ID and MYTHIC_SECRET environment variables.")
+		return
+	}
+
+	// Allow overriding zone for testing
+	if zone == "" {
+		fmt.Println("Please set MYTHIC_ZONE environment variable.")
+		return
+	}
+
 	ctx := context.TODO()
 
-	zone := "example.com."
+	provider := mythicbeasts.Provider{KeyID: keyID, Secret: secret}
 
-	provider := mythicbeasts.Provider{KeyID: "KEYID_GOES_HERE", Secret: "SECRET_GOES_HERE"}
-
+	fmt.Printf("Listing records for zone: %s\n", zone)
 	// Get Records Test
 	records, err := provider.GetRecords(ctx, zone)
 	if err != nil {
 		fmt.Printf("ERROR: %s\n", err.Error())
+	} else {
+		fmt.Printf("GetRecords: Found %d records.\n", len(records))
 	}
 
 	// Append Records Test
+	fmt.Println("\n--- Appending Records ---")
 	recordsAdded, err := provider.AppendRecords(ctx, zone, []libdns.Record{
 		libdns.Address{Name: "appendtest1", IP: netip.MustParseAddr("8.8.4.4"), TTL: time.Duration(123) * time.Second},
 		libdns.Address{Name: "appendtest2", IP: netip.MustParseAddr("2a00:1098:0:80:1000:3b:1:1"), TTL: time.Duration(123) * time.Second},
@@ -43,8 +61,10 @@ func main() {
 	if err != nil {
 		fmt.Printf("ERROR: %s\n", err.Error())
 	}
+	fmt.Printf("Added: %+v\n", recordsAdded)
 
-	// Set Records Test
+	// Set Records Test - Demonstrating multiple records for same name (Fix verification)
+	fmt.Println("\n--- Setting Records (Batch Update) ---")
 	recordsSet, err := provider.SetRecords(ctx, zone, []libdns.Record{
 		libdns.Address{Name: "settest1", IP: netip.MustParseAddr("8.8.8.8"), TTL: time.Duration(999) * time.Second},
 		libdns.CNAME{Name: "settest2", Target: "test2.example.com", TTL: time.Duration(999) * time.Second},
@@ -55,11 +75,15 @@ func main() {
 	if err != nil {
 		fmt.Printf("ERROR: %s\n", err.Error())
 	}
+	fmt.Printf("Set: %+v\n", recordsSet)
 
 	// Delete Records Test
+	fmt.Println("\n--- Deleting Records ---")
 	recordsDeleted, err := provider.DeleteRecords(ctx, zone, []libdns.Record{
 		libdns.Address{Name: "settest1"},
 		libdns.CNAME{Name: "settest2"},
+		libdns.RR{Type: "TXT", Name: "appendtest"},
+		libdns.RR{Type: "A", Name: "multitest"},
 	})
 	if err != nil {
 		fmt.Printf("ERROR: %s\n", err.Error())
