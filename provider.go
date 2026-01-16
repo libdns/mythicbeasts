@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/libdns/libdns"
 	"golang.org/x/net/publicsuffix"
@@ -16,7 +17,8 @@ type Provider struct {
 	KeyID  string `json:"key_id,omitempty"`
 	Secret string `json:"secret,omitempty"`
 
-	token mythicAuthResponse
+	token          mythicAuthResponse
+	tokenExpiresAt time.Time
 
 	mutex sync.Mutex
 }

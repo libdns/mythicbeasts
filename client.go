@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/libdns/libdns"
 )
@@ -25,8 +26,8 @@ func (p *Provider) login(ctx context.Context) error {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
-	if p.token.Token != "" {
-		// Already authenticated, stop now
+	// Check if token is present and valid (with 30s buffer)
+	if p.token.Token != "" && time.Now().Add(30*time.Second).Before(p.tokenExpiresAt) {
 		return nil
 	}
 
@@ -82,6 +83,15 @@ func (p *Provider) login(ctx context.Context) error {
 	}
 
 	p.token = authResp
+	// Set expiration time based on Lifetime (in seconds). Default to a safe fallback if 0?
+	// Specs usually say expires_in.
+	if authResp.Lifetime > 0 {
+		p.tokenExpiresAt = time.Now().Add(time.Duration(authResp.Lifetime) * time.Second)
+	} else {
+		// Fallback or assume indefinitely? Let's check docs or be safe.
+		// If 0, maybe it doesn't expire. But let's assume it does to be safe, e.g. 1 hour.
+		p.tokenExpiresAt = time.Now().Add(1 * time.Hour)
+	}
 
 	// Success
 	return nil
@@ -111,6 +121,11 @@ func (p *Provider) doAPIRequest(ctx context.Context, method, url string, body io
 	}
 
 	if resp.StatusCode != 200 {
+		if resp.StatusCode == 401 {
+			p.token.Token = ""
+			p.tokenExpiresAt = time.Time{}
+		}
+
 		errResp := &mythicError{}
 		errorsResp := &mythicErrors{}
 
