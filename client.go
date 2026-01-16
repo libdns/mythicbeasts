@@ -145,7 +145,7 @@ func (p *Provider) addRecords(ctx context.Context, zone string, records []libdns
 		return nil, fmt.Errorf("addRecords: Error creating JSON payload: %s", err.Error())
 	}
 
-	respBody, err := p.doAPIRequest(ctx, "POST", apiURL+"/zones/"+zone+"/records", bytes.NewReader(payload))
+	respBody, err := p.doAPIRequest(ctx, "POST", apiURL+"/zones/"+url.PathEscape(zone)+"/records", bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("addRecords: %w", err)
 	}
@@ -207,7 +207,7 @@ func (p *Provider) setRecordsAtomic(ctx context.Context, zone string, records []
 		values.Add("select", val)
 	}
 
-	reqURL := apiURL + "/zones/" + zone + "/records?" + values.Encode()
+	reqURL := apiURL + "/zones/" + url.PathEscape(zone) + "/records?" + values.Encode()
 
 	respBody, err := p.doAPIRequest(ctx, "PUT", reqURL, bytes.NewReader(payload))
 	if err != nil {
@@ -236,9 +236,9 @@ func (p *Provider) removeRecord(ctx context.Context, zone string, record libdns.
 		return nil, fmt.Errorf("removeRecord: Error converting libdns record to mythic record: %s", err.Error())
 	}
 
-	reqURL := apiURL + "/zones/" + zone + "/records/" +
-		data.Records[0].GetName() + "/" +
-		data.Records[0].GetType() +
+	reqURL := apiURL + "/zones/" + url.PathEscape(zone) + "/records/" +
+		url.PathEscape(data.Records[0].GetName()) + "/" +
+		url.PathEscape(data.Records[0].GetType()) +
 		"?exclude-template&exclude-generated"
 
 	respBody, err := p.doAPIRequest(ctx, "DELETE", reqURL, nil)

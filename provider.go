@@ -3,9 +3,7 @@ package mythicbeasts
 import (
 	"context"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 
@@ -40,28 +38,17 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 		return nil, fmt.Errorf("Provided zone string malformed %d", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", apiURL+"/zones/"+formatedZone+"/records", nil)
-	if err != nil {
-		return nil, fmt.Errorf("login: provider record request failed: %d", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+p.token.Token)
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
 
-	resp, err := http.DefaultClient.Do(req)
+	respBody, err := p.doAPIRequest(ctx, "GET", apiURL+"/zones/"+url.PathEscape(formatedZone)+"/records", nil)
 	if err != nil {
-		return nil, fmt.Errorf("login: provider record request failed: %d", err)
-	}
-	defer func(Body io.ReadCloser) {
-		_ = Body.Close()
-	}(resp.Body)
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("login: failed to read response body: %d", err)
+		return nil, fmt.Errorf("GetRecords: %w", err)
 	}
 
 	result := mythicRecords{}
 
-	err = result.UnmarshalJSON(body)
+	err = result.UnmarshalJSON(respBody)
 	if err != nil {
 		return nil, fmt.Errorf("GetRecords: failed to unmarshal response: %d", err)
 	}
