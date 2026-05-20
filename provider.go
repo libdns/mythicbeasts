@@ -32,12 +32,12 @@ func (p *Provider) unFQDN(fqdn string) string {
 func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record, error) {
 	err := p.login(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("login: provider login failed: %d", err)
+		return nil, fmt.Errorf("login: provider login failed: %w", err)
 	}
 
 	formatedZone, err := publicsuffix.EffectiveTLDPlusOne(p.unFQDN(zone))
 	if err != nil {
-		return nil, fmt.Errorf("Provided zone string malformed %d", err)
+		return nil, fmt.Errorf("Provided zone string malformed: %w", err)
 	}
 
 	p.mutex.Lock()
@@ -52,7 +52,7 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 
 	err = result.UnmarshalJSON(respBody)
 	if err != nil {
-		return nil, fmt.Errorf("GetRecords: failed to unmarshal response: %d", err)
+		return nil, fmt.Errorf("GetRecords: failed to unmarshal response: %w", err)
 	}
 
 	var records []libdns.Record
@@ -60,7 +60,7 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 	for _, r := range result.Records {
 		record, err := r.GetLibdnsRecord()
 		if err != nil {
-			return nil, fmt.Errorf("GetRecords: failed to parse record %s: %d", r.GetName(), err)
+			return nil, fmt.Errorf("GetRecords: failed to parse record %s: %w", r.GetName(), err)
 		}
 
 		records = append(records, record)
@@ -72,18 +72,18 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 func (p *Provider) AppendRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
 	err := p.login(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("login: provider login failed: %d", err)
+		return nil, fmt.Errorf("login: provider login failed: %w", err)
 	}
 
 	formatedZone, err := publicsuffix.EffectiveTLDPlusOne(p.unFQDN(zone))
 	if err != nil {
-		return nil, fmt.Errorf("Provided zone string malformed %d", err)
+		return nil, fmt.Errorf("Provided zone string malformed: %w", err)
 	}
 
 	// Batch add records
 	appendedRecords, err := p.addRecords(ctx, formatedZone, records)
 	if err != nil {
-		return nil, fmt.Errorf("AppendRecords: %d", err)
+		return nil, fmt.Errorf("AppendRecords: %w", err)
 	}
 
 	return appendedRecords, nil
@@ -94,18 +94,18 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
 	err := p.login(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("login: provider login failed: %d", err)
+		return nil, fmt.Errorf("login: provider login failed: %w", err)
 	}
 
 	formatedZone, err := publicsuffix.EffectiveTLDPlusOne(p.unFQDN(zone))
 	if err != nil {
-		return nil, fmt.Errorf("Provided zone string malformed %d", err)
+		return nil, fmt.Errorf("Provided zone string malformed: %w", err)
 	}
 
 	// Atomic set records
 	setRecord, err := p.setRecordsAtomic(ctx, formatedZone, records)
 	if err != nil {
-		return nil, fmt.Errorf("SetRecords: %d", err)
+		return nil, fmt.Errorf("SetRecords: %w", err)
 	}
 	return setRecord, nil
 }
@@ -114,12 +114,12 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
 	err := p.login(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("login: provider login failed: %d", err)
+		return nil, fmt.Errorf("login: provider login failed: %w", err)
 	}
 
 	formatedZone, err := publicsuffix.EffectiveTLDPlusOne(p.unFQDN(zone))
 	if err != nil {
-		return nil, fmt.Errorf("Provided zone string malformed %d", err)
+		return nil, fmt.Errorf("Provided zone string malformed: %w", err)
 	}
 
 	var deletedRecords []libdns.Record
@@ -127,7 +127,7 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 	for _, record := range records {
 		deletedRecord, err := p.removeRecord(ctx, formatedZone, record)
 		if err != nil {
-			return deletedRecords, fmt.Errorf("DeleteRecords: %d", err)
+			return deletedRecords, fmt.Errorf("DeleteRecords: %w", err)
 		}
 		deletedRecords = append(deletedRecords, deletedRecord...)
 	}
