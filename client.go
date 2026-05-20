@@ -144,98 +144,110 @@ func (p *Provider) doAPIRequest(ctx context.Context, method, url string, body io
 }
 
 func (p *Provider) addRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
+	type hostType struct {
+		host  string
+		rType string
+	}
+
+	groups := make(map[hostType][]libdns.Record)
+	for _, record := range records {
+		rr := record.RR()
+		host := rr.Name
+		if host == "" {
+			host = "@"
+		}
+		key := hostType{host: host, rType: rr.Type}
+		groups[key] = append(groups[key], record)
+	}
+
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
 	var addedRecords []libdns.Record
 
-	data := mythicRecords{}
-	var err = data.FromLibdns(records)
-	if err != nil {
-		return nil, fmt.Errorf("addRecords: Error converting libdns record to mythic record: %s", err.Error())
+	for key, groupRecords := range groups {
+		data := mythicRecords{}
+		var err = data.FromLibdns(groupRecords)
+		if err != nil {
+			return nil, fmt.Errorf("addRecords: Error converting libdns record to mythic record: %w", err)
+		}
+
+		payload, err := json.Marshal(data)
+		if err != nil {
+			return nil, fmt.Errorf("addRecords: Error creating JSON payload: %w", err)
+		}
+
+		reqURL := apiURL + "/zones/" + url.PathEscape(zone) + "/records/" + url.PathEscape(key.host) + "/" + url.PathEscape(key.rType)
+		respBody, err := p.doAPIRequest(ctx, "POST", reqURL, bytes.NewReader(payload))
+		if err != nil {
+			return nil, fmt.Errorf("addRecords: %w", err)
+		}
+
+		appendResp := mythicRecordUpdate{}
+		err = json.Unmarshal(respBody, &appendResp)
+		if err != nil {
+			return nil, fmt.Errorf("addRecords: error parsing response: %w", err)
+		}
+
+		addedRecords = append(addedRecords, groupRecords...)
 	}
 
-	payload, err := json.Marshal(data)
-	if err != nil {
-		return nil, fmt.Errorf("addRecords: Error creating JSON payload: %s", err.Error())
-	}
-
-	respBody, err := p.doAPIRequest(ctx, "POST", apiURL+"/zones/"+url.PathEscape(zone)+"/records", bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("addRecords: %w", err)
-	}
-
-	appendResp := mythicRecordUpdate{}
-	err = json.Unmarshal(respBody, &appendResp)
-	if err != nil {
-		return nil, fmt.Errorf("addRecords: error parsing response: %w", err)
-	}
-
-	// Assuming all were added if successful.
-	addedRecords = append(addedRecords, records...)
 	return addedRecords, nil
 }
 
 func (p *Provider) setRecordsAtomic(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
+	if len(records) == 0 {
+		return nil, nil
+	}
+
+	type hostType struct {
+		host  string
+		rType string
+	}
+
+	groups := make(map[hostType][]libdns.Record)
+	for _, record := range records {
+		rr := record.RR()
+		host := rr.Name
+		if host == "" {
+			host = "@"
+		}
+		key := hostType{host: host, rType: rr.Type}
+		groups[key] = append(groups[key], record)
+	}
+
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
 	var setRecords []libdns.Record
 
-	if len(records) == 0 {
-		return setRecords, nil
-	}
-
-	data := mythicRecords{}
-	var err = data.FromLibdns(records)
-	if err != nil {
-		return nil, fmt.Errorf("setRecordsAtomic: Error converting libdns records to mythic records: %s", err.Error())
-	}
-
-	payload, err := json.Marshal(data)
-	if err != nil {
-		return nil, fmt.Errorf("setRecordsAtomic: Error creating JSON payload: %s", err.Error())
-	}
-
-	// Build query parameters for atomic replacement
-	// We need to select all host/type pairs being set.
-	values := url.Values{}
-	seen := make(map[string]bool)
-
-	for _, rec := range records {
-		rr := rec.RR()
-		// Determine host relative to zone.
-		// SetRecords guarantees Name is relative to zone.
-		host := rr.Name
-
-		key := host + "|" + rr.Type
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-
-		if host == "" || host == "@" {
-			host = "@"
+	for key, groupRecords := range groups {
+		data := mythicRecords{}
+		var err = data.FromLibdns(groupRecords)
+		if err != nil {
+			return nil, fmt.Errorf("setRecordsAtomic: Error converting libdns records to mythic records: %w", err)
 		}
 
-		val := fmt.Sprintf("host=%s&type=%s", host, rr.Type)
-		values.Add("select", val)
+		payload, err := json.Marshal(data)
+		if err != nil {
+			return nil, fmt.Errorf("setRecordsAtomic: Error creating JSON payload: %w", err)
+		}
+
+		reqURL := apiURL + "/zones/" + url.PathEscape(zone) + "/records/" + url.PathEscape(key.host) + "/" + url.PathEscape(key.rType)
+		respBody, err := p.doAPIRequest(ctx, "PUT", reqURL, bytes.NewReader(payload))
+		if err != nil {
+			return nil, fmt.Errorf("setRecordsAtomic: %w", err)
+		}
+
+		appendResp := mythicRecordUpdate{}
+		err = json.Unmarshal(respBody, &appendResp)
+		if err != nil {
+			return nil, fmt.Errorf("setRecordsAtomic: error parsing response: %w", err)
+		}
+
+		setRecords = append(setRecords, groupRecords...)
 	}
 
-	reqURL := apiURL + "/zones/" + url.PathEscape(zone) + "/records?" + values.Encode()
-
-	respBody, err := p.doAPIRequest(ctx, "PUT", reqURL, bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("setRecordsAtomic: %w", err)
-	}
-
-	appendResp := mythicRecordUpdate{}
-	err = json.Unmarshal(respBody, &appendResp)
-	if err != nil {
-		return nil, fmt.Errorf("setRecordsAtomic: error parsing response: %w", err)
-	}
-
-	setRecords = append(setRecords, records...)
 	return setRecords, nil
 }
 
