@@ -104,9 +104,9 @@ func (p *Provider) login(ctx context.Context) error {
 	return nil
 }
 
-// doAPIRequest handles the common logic for making authenticated API requests
-func (p *Provider) doAPIRequest(ctx context.Context, method, url string, body io.Reader) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, method, url, body)
+// doRequest handles the common logic for making authenticated API requests
+func (p *Provider) doRequest(ctx context.Context, method, endpoint string, body io.Reader) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, method, apiURL+endpoint, body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -196,8 +196,8 @@ func (p *Provider) addRecords(ctx context.Context, formatedZone string, original
 			return nil, fmt.Errorf("addRecords: Error creating JSON payload: %w", err)
 		}
 
-		reqURL := apiURL + "/zones/" + url.PathEscape(formatedZone) + "/records/" + url.PathEscape(key.host) + "/" + url.PathEscape(key.rType)
-		respBody, err := p.doAPIRequest(ctx, "POST", reqURL, bytes.NewReader(payload))
+		reqURL := "/zones/" + url.PathEscape(formatedZone) + "/records/" + url.PathEscape(key.host) + "/" + url.PathEscape(key.rType)
+		respBody, err := p.doRequest(ctx, "POST", reqURL, bytes.NewReader(payload))
 		if err != nil {
 			return nil, fmt.Errorf("addRecords: %w", err)
 		}
@@ -258,8 +258,8 @@ func (p *Provider) setRecordsAtomic(ctx context.Context, formatedZone string, or
 			return nil, fmt.Errorf("setRecordsAtomic: Error creating JSON payload: %w", err)
 		}
 
-		reqURL := apiURL + "/zones/" + url.PathEscape(formatedZone) + "/records/" + url.PathEscape(key.host) + "/" + url.PathEscape(key.rType)
-		respBody, err := p.doAPIRequest(ctx, "PUT", reqURL, bytes.NewReader(payload))
+		reqURL := "/zones/" + url.PathEscape(formatedZone) + "/records/" + url.PathEscape(key.host) + "/" + url.PathEscape(key.rType)
+		respBody, err := p.doRequest(ctx, "PUT", reqURL, bytes.NewReader(payload))
 		if err != nil {
 			return nil, fmt.Errorf("setRecordsAtomic: %w", err)
 		}
@@ -290,12 +290,12 @@ func (p *Provider) removeRecord(ctx context.Context, formatedZone string, origin
 		return nil, fmt.Errorf("removeRecord: error converting libdns record to mythic record: %w", err)
 	}
 
-	reqURL := apiURL + "/zones/" + url.PathEscape(formatedZone) + "/records/" +
+	reqURL := "/zones/" + url.PathEscape(formatedZone) + "/records/" +
 		url.PathEscape(data.Records[0].GetName()) + "/" +
 		url.PathEscape(data.Records[0].GetType()) +
 		"?exclude-template&exclude-generated"
 
-	respBody, err := p.doAPIRequest(ctx, "DELETE", reqURL, nil)
+	respBody, err := p.doRequest(ctx, "DELETE", reqURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("removeRecord: %w", err)
 	}
@@ -310,4 +310,75 @@ func (p *Provider) removeRecord(ctx context.Context, formatedZone string, origin
 		removedRecords = append(removedRecords, record)
 	}
 	return removedRecords, nil
+}
+
+// unFQDN trims any trailing "." from fqdn.
+func (p *Provider) unFQDN(fqdn string) string {
+	return strings.TrimSuffix(fqdn, ".")
+}
+
+// fqdnOf returns the FQDN of the recordName relative to the zone.
+func fqdnOf(recordName, zone string) string {
+	cleanRec := strings.TrimSuffix(strings.TrimSpace(recordName), ".")
+	cleanZone := strings.TrimSuffix(strings.TrimSpace(zone), ".")
+	if cleanRec == "" || cleanRec == "@" {
+		return cleanZone
+	}
+	return cleanRec + "." + cleanZone
+}
+
+// relativeName returns the name of fqdn relative to zone, and true if fqdn is within zone.
+// If fqdn is not within zone, it returns "", false.
+func relativeName(fqdn, zone string) (string, bool) {
+	cleanFQDN := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(fqdn)), ".")
+	cleanZone := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(zone)), ".")
+
+	if cleanFQDN == cleanZone {
+		return "", true
+	}
+
+	suffix := "." + cleanZone
+	if strings.HasSuffix(cleanFQDN, suffix) {
+		// Use original case of the prefix of fqdn
+		fqdnNoDot := strings.TrimSuffix(fqdn, ".")
+		relLen := len(fqdnNoDot) - len(suffix)
+		if relLen >= 0 {
+			return fqdnNoDot[:relLen], true
+		}
+	}
+
+	return "", false
+}
+
+// adjustRecordName copies the record with its name adjusted relative to formatedZone.
+func (p *Provider) adjustRecordName(originalZone, formatedZone string, record libdns.Record) libdns.Record {
+	fqdn := fqdnOf(record.RR().Name, originalZone)
+	relName, ok := relativeName(fqdn, formatedZone)
+	if !ok {
+		// Fallback to original record name just in case
+		return record
+	}
+
+	name := relName
+	if srv, ok := record.(libdns.SRV); ok {
+		prefix := "_" + srv.Service + "._" + srv.Transport
+		if strings.HasPrefix(relName, prefix+".") {
+			name = relName[len(prefix)+1:]
+		} else if relName == prefix {
+			name = ""
+		}
+	}
+
+	switch r := record.(type) {
+	case libdns.Address: r.Name = name; return r
+	case libdns.CNAME:   r.Name = name; return r
+	case libdns.NS:      r.Name = name; return r
+	case libdns.TXT:     r.Name = name; return r
+	case libdns.RR:      r.Name = name; return r
+	case libdns.MX:      r.Name = name; return r
+	case libdns.CAA:     r.Name = name; return r
+	case libdns.SRV:     r.Name = name; return r
+	default:
+		return record
+	}
 }
