@@ -338,5 +338,5 @@ type mythicError struct {
 }
 
 type mythicErrors struct {
-	Errors []string `json:",omitempty"`
+	Errors []string `json:"errors,omitempty"`
 }
