@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/netip"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/libdns/libdns"
@@ -16,81 +17,135 @@ func main() {
 	secret := os.Getenv("MYTHIC_SECRET")
 	zone := os.Getenv("MYTHIC_ZONE")
 
-	if keyID == "" || secret == "" {
-		fmt.Println("Please set MYTHIC_KEY_ID and MYTHIC_SECRET environment variables.")
-		return
-	}
-
-	// Allow overriding zone for testing
-	if zone == "" {
-		fmt.Println("Please set MYTHIC_ZONE environment variable.")
+	if keyID == "" || secret == "" || zone == "" {
+		fmt.Println("Please set MYTHIC_KEY_ID, MYTHIC_SECRET, and MYTHIC_ZONE environment variables.")
 		return
 	}
 
 	ctx := context.TODO()
-
 	provider := mythicbeasts.Provider{KeyID: keyID, Secret: secret}
 
-	fmt.Printf("Listing records for zone: %s\n", zone)
-	// Get Records Test
-	records, err := provider.GetRecords(ctx, zone)
+	// Prefix all test records to keep track of them easily
+	const testPrefix = "libdnstest-"
+
+	// Keep track of records we need to clean up at the end
+	var recordsToClean []libdns.Record
+
+	// Cleanup function to ensure DNS is left clean
+	cleanup := func() {
+		if len(recordsToClean) == 0 {
+			return
+		}
+		fmt.Printf("\n--- Cleaning Up DNS (Deleting %d Test Records) ---\n", len(recordsToClean))
+		
+		type recordKey struct {
+			name  string
+			rType string
+		}
+		seen := make(map[recordKey]bool)
+		var uniqueDeletes []libdns.Record
+		for _, r := range recordsToClean {
+			rr := r.RR()
+			key := recordKey{name: rr.Name, rType: rr.Type}
+			if !seen[key] {
+				seen[key] = true
+				uniqueDeletes = append(uniqueDeletes, r)
+			}
+		}
+
+		deleted, err := provider.DeleteRecords(ctx, zone, uniqueDeletes)
+		if err != nil {
+			fmt.Printf("Cleanup Error: %v\n", err)
+		} else {
+			fmt.Printf("Successfully deleted %d records from the zone.\n", len(deleted))
+		}
+	}
+	defer cleanup()
+
+	fmt.Printf("Starting Mythic Beasts Integration Test for Zone: %s\n", zone)
+
+	fmt.Println("\n--- Fetching Initial Records ---")
+	initialRecords, err := provider.GetRecords(ctx, zone)
 	if err != nil {
-		fmt.Printf("ERROR: %s\n", err.Error())
-	} else {
-		fmt.Printf("GetRecords: Found %d records.\n", len(records))
+		fmt.Printf("Failed to get initial records: %v\n", err)
+		return
+	}
+	fmt.Printf("Found %d existing records in the zone.\n", len(initialRecords))
+
+	fmt.Println("\n--- Appending Test Records ---")
+	recordsToAppend := []libdns.Record{
+		libdns.Address{Name: testPrefix + "a", IP: netip.MustParseAddr("1.2.3.4"), TTL: 300 * time.Second},
+		libdns.Address{Name: testPrefix + "aaaa", IP: netip.MustParseAddr("2001:db8::1"), TTL: 300 * time.Second},
+		libdns.CNAME{Name: testPrefix + "cname", Target: "target.example.com.", TTL: 300 * time.Second},
+		libdns.TXT{Name: testPrefix + "txt", Text: "Hello Mythic Beasts", TTL: 300 * time.Second},
+		libdns.MX{Name: testPrefix + "mx", Target: "mail.example.com.", Preference: 10, TTL: 300 * time.Second},
+		libdns.CAA{Name: testPrefix + "caa", Flags: 128, Tag: "issue", Value: "letsencrypt.org", TTL: 300 * time.Second},
+		libdns.SRV{Service: "sip", Transport: "tcp", Name: testPrefix + "srv", Target: "srv.example.com.", Port: 5060, Priority: 10, Weight: 5, TTL: 300 * time.Second},
 	}
 
-	// Append Records Test
-	fmt.Println("\n--- Appending Records ---")
-	recordsAdded, err := provider.AppendRecords(ctx, zone, []libdns.Record{
-		libdns.Address{Name: "appendtest1", IP: netip.MustParseAddr("8.8.4.4"), TTL: time.Duration(123) * time.Second},
-		libdns.Address{Name: "appendtest2", IP: netip.MustParseAddr("2a00:1098:0:80:1000:3b:1:1"), TTL: time.Duration(123) * time.Second},
-		libdns.RR{Name: "appendtest3", Type: "ANAME", Data: "www.google.co.uk.", TTL: time.Duration(999) * time.Second},
-		libdns.CNAME{Name: "appendtest4", Target: "www.example.com.", TTL: time.Duration(666) * time.Second},
-		libdns.RR{Name: "appendtest5", Type: "DNAME", Data: "www.google.co.uk.", TTL: time.Duration(999) * time.Second},
-		libdns.NS{Name: "appendtest6", Target: "ns1.mythic-beasts.com.", TTL: time.Duration(999) * time.Second},
-		libdns.RR{Name: "appendtest7", Type: "PTR", Data: "test.example.com.", TTL: time.Duration(999) * time.Second},
-		libdns.TXT{Name: "appendtest8", Text: "This is a test record", TTL: time.Duration(999) * time.Second},
-		libdns.MX{Name: "appendtest9", Target: "mail.example.com.", Preference: 10, TTL: time.Duration(999) * time.Second},
-		libdns.MX{Name: "appendtest10", Target: "mail2.example.com.", Preference: 20, TTL: time.Duration(999) * time.Second},
-		libdns.CAA{Name: "appendtest11", Flags: 128, Tag: "issue", Value: "letsencrypt.org", TTL: time.Duration(999) * time.Second},
-		libdns.SRV{Service: "sip", Transport: "tcp", Name: "appendtest12", Target: "srv.example.com.", Port: 443, Priority: 10, Weight: 5, TTL: time.Duration(999) * time.Second},
-		libdns.RR{Name: "appendtest13", Type: "SSHFP", Data: "3 2 abc1234abc", TTL: time.Duration(999) * time.Second},
-		libdns.RR{Name: "appendtest14", Type: "TLSA", Data: "2 1 2 dab111caba", TTL: time.Duration(999) * time.Second},
-	})
-	if err != nil {
-		fmt.Printf("ERROR: %s\n", err.Error())
-	}
-	fmt.Printf("Added: %+v\n", recordsAdded)
-
-	// Set Records Test - Demonstrating multiple records for same name (Fix verification)
-	fmt.Println("\n--- Setting Records (Batch Update) ---")
-	recordsSet, err := provider.SetRecords(ctx, zone, []libdns.Record{
-		libdns.Address{Name: "settest1", IP: netip.MustParseAddr("8.8.8.8"), TTL: time.Duration(999) * time.Second},
-		libdns.CNAME{Name: "settest2", Target: "test2.example.com", TTL: time.Duration(999) * time.Second},
-		libdns.CNAME{Name: "settest3", Target: "test3.example.net"},
-		libdns.MX{Name: "settest4", Target: "mail3.example.com.", Preference: 5, TTL: time.Duration(999) * time.Second},
-		libdns.MX{Name: "settest5", Target: "mail4.example.com.", Preference: 8, TTL: time.Duration(999) * time.Second},
-	})
-	if err != nil {
-		fmt.Printf("ERROR: %s\n", err.Error())
-	}
-	fmt.Printf("Set: %+v\n", recordsSet)
-
-	// Delete Records Test
-	fmt.Println("\n--- Deleting Records ---")
-	recordsDeleted, err := provider.DeleteRecords(ctx, zone, []libdns.Record{
-		libdns.Address{Name: "settest1"},
-		libdns.CNAME{Name: "settest2"},
-		libdns.RR{Type: "TXT", Name: "appendtest"},
-		libdns.RR{Type: "A", Name: "multitest"},
-	})
-	if err != nil {
-		fmt.Printf("ERROR: %s\n", err.Error())
+	for _, r := range recordsToAppend {
+		rr := r.RR()
+		appended, err := provider.AppendRecords(ctx, zone, []libdns.Record{r})
+		if err != nil {
+			if strings.Contains(err.Error(), "403") || strings.Contains(err.Error(), "Access denied") {
+				fmt.Printf("  [Skipped] %s (%s): Access Denied (Key restricted/read-only for this type)\n", rr.Name, rr.Type)
+			} else {
+				fmt.Printf("  [Failed] %s (%s): %v\n", rr.Name, rr.Type, err)
+			}
+			continue
+		}
+		for _, rec := range appended {
+			recRR := rec.RR()
+			fmt.Printf("  [Appended] %s (%s) -> %s\n", recRR.Name, recRR.Type, recRR.Data)
+			recordsToClean = append(recordsToClean, rec)
+		}
 	}
 
-	fmt.Printf("\nThe following records are available from %s:\n%+v\n", zone, records)
-	fmt.Printf("\nThe following records have been added to %s:\n%+v\n", zone, recordsAdded)
-	fmt.Printf("\nThe following records have been set on %s:\n%+v\n", zone, recordsSet)
-	fmt.Printf("\nThe following records have been deleted on %s:\n%s\n", zone, recordsDeleted)
+	fmt.Println("\n--- Setting Records (Upsert / Update) ---")
+	recordsToSet := []libdns.Record{
+		// Update the previously added TXT record (always allowed if TXT is allowed)
+		libdns.TXT{Name: testPrefix + "txt", Text: "Updated Hello Mythic Beasts", TTL: 600 * time.Second},
+		// Try updating an A record (might be skipped if key is restricted)
+		libdns.Address{Name: testPrefix + "a", IP: netip.MustParseAddr("5.6.7.8"), TTL: 600 * time.Second},
+		// Try a new A record (might be skipped)
+		libdns.Address{Name: testPrefix + "new-a", IP: netip.MustParseAddr("9.10.11.12"), TTL: 300 * time.Second},
+	}
+
+	for _, r := range recordsToSet {
+		rr := r.RR()
+		set, err := provider.SetRecords(ctx, zone, []libdns.Record{r})
+		if err != nil {
+			if strings.Contains(err.Error(), "403") || strings.Contains(err.Error(), "Access denied") {
+				fmt.Printf("  [Skipped] %s (%s): Access Denied (Key restricted/read-only for this type)\n", rr.Name, rr.Type)
+			} else {
+				fmt.Printf("  [Failed] %s (%s): %v\n", rr.Name, rr.Type, err)
+			}
+			continue
+		}
+		for _, rec := range set {
+			recRR := rec.RR()
+			fmt.Printf("  [Set] %s (%s) -> %s\n", recRR.Name, recRR.Type, recRR.Data)
+			recordsToClean = append(recordsToClean, rec)
+		}
+	}
+
+	fmt.Println("\n--- Verifying Current Records ---")
+	currentRecords, err := provider.GetRecords(ctx, zone)
+	if err != nil {
+		fmt.Printf("Failed to verify records: %v\n", err)
+		return
+	}
+
+	fmt.Println("Created/Modified test records found in the zone:")
+	foundCount := 0
+	for _, r := range currentRecords {
+		rr := r.RR()
+		if strings.HasPrefix(rr.Name, testPrefix) || strings.HasPrefix(rr.Name, "_sip._tcp."+testPrefix) {
+			fmt.Printf("  - %s (%s) -> %s [TTL: %s]\n", rr.Name, rr.Type, rr.Data, rr.TTL)
+			foundCount++
+		}
+	}
+	fmt.Printf("Total test records active: %d\n", foundCount)
+
+	// Cleanup will run automatically via defer, leaving the DNS profile completely clean!
 }

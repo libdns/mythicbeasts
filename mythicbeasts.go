@@ -106,10 +106,17 @@ func (r mythicSrvRecord) GetType() string {
 }
 func (r mythicSrvRecord) GetLibdnsRecord() (libdns.Record, error) {
 	nameParts := strings.Split(r.Name, ".")
+	if len(nameParts) < 2 {
+		return nil, fmt.Errorf("invalid SRV record name: %s", r.Name)
+	}
+	var name string
+	if len(nameParts) > 2 {
+		name = strings.Join(nameParts[2:], ".")
+	}
 	return libdns.SRV{
 		Service:   strings.TrimPrefix(nameParts[0], "_"),
 		Transport: strings.TrimPrefix(nameParts[1], "_"),
-		Name:      nameParts[2],
+		Name:      name,
 		TTL:       time.Duration(r.TTL) * time.Second,
 		Priority:  r.Priority,
 		Weight:    r.Weight,
@@ -331,5 +338,5 @@ type mythicError struct {
 }
 
 type mythicErrors struct {
-	Errors []string `json:",omitempty"`
+	Errors []string `json:"errors,omitempty"`
 }

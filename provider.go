@@ -63,7 +63,14 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 			return nil, fmt.Errorf("GetRecords: failed to parse record %s: %w", r.GetName(), err)
 		}
 
-		records = append(records, record)
+		fqdn := fqdnOf(record.RR().Name, formatedZone)
+		_, ok := relativeName(fqdn, zone)
+		if !ok {
+			continue
+		}
+
+		adjusted := p.adjustRecordName(formatedZone, zone, record)
+		records = append(records, adjusted)
 	}
 	return records, nil
 }
@@ -81,7 +88,7 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 	}
 
 	// Batch add records
-	appendedRecords, err := p.addRecords(ctx, formatedZone, records)
+	appendedRecords, err := p.addRecords(ctx, formatedZone, zone, records)
 	if err != nil {
 		return nil, fmt.Errorf("AppendRecords: %w", err)
 	}
@@ -103,7 +110,7 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 	}
 
 	// Atomic set records
-	setRecord, err := p.setRecordsAtomic(ctx, formatedZone, records)
+	setRecord, err := p.setRecordsAtomic(ctx, formatedZone, zone, records)
 	if err != nil {
 		return nil, fmt.Errorf("SetRecords: %w", err)
 	}
@@ -125,7 +132,7 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 	var deletedRecords []libdns.Record
 
 	for _, record := range records {
-		deletedRecord, err := p.removeRecord(ctx, formatedZone, record)
+		deletedRecord, err := p.removeRecord(ctx, formatedZone, zone, record)
 		if err != nil {
 			return deletedRecords, fmt.Errorf("DeleteRecords: %w", err)
 		}
@@ -142,3 +149,70 @@ var (
 	_ libdns.RecordSetter   = (*Provider)(nil)
 	_ libdns.RecordDeleter  = (*Provider)(nil)
 )
+
+// fqdnOf returns the FQDN of the recordName relative to the zone.
+func fqdnOf(recordName, zone string) string {
+	cleanRec := strings.TrimSuffix(strings.TrimSpace(recordName), ".")
+	cleanZone := strings.TrimSuffix(strings.TrimSpace(zone), ".")
+	if cleanRec == "" || cleanRec == "@" {
+		return cleanZone
+	}
+	return cleanRec + "." + cleanZone
+}
+
+// relativeName returns the name of fqdn relative to zone, and true if fqdn is within zone.
+// If fqdn is not within zone, it returns "", false.
+func relativeName(fqdn, zone string) (string, bool) {
+	cleanFQDN := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(fqdn)), ".")
+	cleanZone := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(zone)), ".")
+
+	if cleanFQDN == cleanZone {
+		return "", true
+	}
+
+	suffix := "." + cleanZone
+	if strings.HasSuffix(cleanFQDN, suffix) {
+		// Use original case of the prefix of fqdn
+		fqdnNoDot := strings.TrimSuffix(fqdn, ".")
+		relLen := len(fqdnNoDot) - len(suffix)
+		if relLen >= 0 {
+			return fqdnNoDot[:relLen], true
+		}
+	}
+
+	return "", false
+}
+
+// adjustRecordName copies the record with its name adjusted relative to formatedZone.
+func (p *Provider) adjustRecordName(originalZone, formatedZone string, record libdns.Record) libdns.Record {
+	fqdn := fqdnOf(record.RR().Name, originalZone)
+	relName, ok := relativeName(fqdn, formatedZone)
+	if !ok {
+		// Fallback to original record name just in case
+		return record
+	}
+
+	name := relName
+	if srv, ok := record.(libdns.SRV); ok {
+		prefix := "_" + srv.Service + "._" + srv.Transport
+		if strings.HasPrefix(relName, prefix+".") {
+			name = relName[len(prefix)+1:]
+		} else if relName == prefix {
+			name = ""
+		}
+	}
+
+	switch r := record.(type) {
+	case libdns.Address: r.Name = name; return r
+	case libdns.CNAME:   r.Name = name; return r
+	case libdns.NS:      r.Name = name; return r
+	case libdns.TXT:     r.Name = name; return r
+	case libdns.RR:      r.Name = name; return r
+	case libdns.MX:      r.Name = name; return r
+	case libdns.CAA:     r.Name = name; return r
+	case libdns.SRV:     r.Name = name; return r
+	default:
+		return record
+	}
+}
+
