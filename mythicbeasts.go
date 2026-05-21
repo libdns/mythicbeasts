@@ -106,6 +106,9 @@ func (r mythicSrvRecord) GetType() string {
 }
 func (r mythicSrvRecord) GetLibdnsRecord() (libdns.Record, error) {
 	nameParts := strings.Split(r.Name, ".")
+	if len(nameParts) < 2 {
+		return nil, fmt.Errorf("invalid SRV record name: %s", r.Name)
+	}
 	return libdns.SRV{
 		Service:   strings.TrimPrefix(nameParts[0], "_"),
 		Transport: strings.TrimPrefix(nameParts[1], "_"),
