@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
@@ -46,30 +45,38 @@ func (p *Provider) login(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("login: unknown auth error")
 	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
+	defer resp.Body.Close()
 
-		}
-	}(resp.Body)
-
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("login: %w", err)
 	}
 
 	if resp.StatusCode != 200 {
-		if resp.StatusCode < 400 || resp.StatusCode > 499 {
-			return fmt.Errorf("login: unknown error in auth API: %d", resp.StatusCode)
-		}
-
 		errResp := &mythicAuthResponseError{}
-		err = json.Unmarshal(body, errResp)
-		if err != nil {
-			return fmt.Errorf("login: error parsing error: %w", err)
+		if err := json.Unmarshal(body, errResp); err == nil {
+			var errMsg string
+			if errResp.ErrorMessage != "" && errResp.ErrorDescription != "" {
+				errMsg = fmt.Sprintf("%s: %s", errResp.ErrorMessage, errResp.ErrorDescription)
+			} else if errResp.ErrorMessage != "" {
+				errMsg = errResp.ErrorMessage
+			} else if errResp.ErrorDescription != "" {
+				errMsg = errResp.ErrorDescription
+			}
+			if errMsg != "" {
+				return fmt.Errorf("login: %d: %s", resp.StatusCode, errMsg)
+			}
 		}
 
-		return fmt.Errorf("login: %d: %s", resp.StatusCode, errResp.ErrorMessage+errResp.ErrorDescription)
+		if len(body) > 0 {
+			trimmedBody := strings.TrimSpace(string(body))
+			if len(trimmedBody) > 200 {
+				trimmedBody = trimmedBody[:200] + "..."
+			}
+			return fmt.Errorf("login: %d: %s", resp.StatusCode, trimmedBody)
+		}
+
+		return fmt.Errorf("login: unknown error in auth API: %d", resp.StatusCode)
 	}
 
 	authResp := mythicAuthResponse{}
@@ -111,13 +118,11 @@ func (p *Provider) doAPIRequest(ctx context.Context, method, url string, body io
 	if err != nil {
 		return nil, fmt.Errorf("http.DefaultClient.Do: %s", err.Error())
 	}
-	defer func(Body io.ReadCloser) {
-		_ = Body.Close()
-	}(resp.Body)
+	defer resp.Body.Close()
 
-	respBody, err := ioutil.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("ioutil.ReadAll: %w", err)
+		return nil, fmt.Errorf("io.ReadAll: %w", err)
 	}
 
 	if resp.StatusCode != 200 {
@@ -129,21 +134,29 @@ func (p *Provider) doAPIRequest(ctx context.Context, method, url string, body io
 		errResp := &mythicError{}
 		errorsResp := &mythicErrors{}
 
-		err := json.Unmarshal(respBody, errorsResp)
-		if err != nil {
-			err := json.Unmarshal(respBody, errResp)
-			if err != nil {
-				return nil, fmt.Errorf("api error: %d", resp.StatusCode)
-			}
+		if err := json.Unmarshal(respBody, errorsResp); err == nil && len(errorsResp.Errors) > 0 {
+			return nil, fmt.Errorf("%d: %s", resp.StatusCode, strings.Join(errorsResp.Errors, ", "))
+		}
+
+		if err := json.Unmarshal(respBody, errResp); err == nil && errResp.Error != "" {
 			return nil, fmt.Errorf("%d: %s", resp.StatusCode, errResp.Error)
 		}
-		return nil, fmt.Errorf("%d: %s", resp.StatusCode, errorsResp.Errors)
+
+		if len(respBody) > 0 {
+			trimmedBody := strings.TrimSpace(string(respBody))
+			if len(trimmedBody) > 200 {
+				trimmedBody = trimmedBody[:200] + "..."
+			}
+			return nil, fmt.Errorf("api error %d: %s", resp.StatusCode, trimmedBody)
+		}
+
+		return nil, fmt.Errorf("api error: %d", resp.StatusCode)
 	}
 
 	return respBody, nil
 }
 
-func (p *Provider) addRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
+func (p *Provider) addRecords(ctx context.Context, formatedZone string, originalZone string, records []libdns.Record) ([]libdns.Record, error) {
 	type hostType struct {
 		host  string
 		rType string
@@ -151,7 +164,8 @@ func (p *Provider) addRecords(ctx context.Context, zone string, records []libdns
 
 	groups := make(map[hostType][]libdns.Record)
 	for _, record := range records {
-		rr := record.RR()
+		adjustedRecord := p.adjustRecordName(originalZone, formatedZone, record)
+		rr := adjustedRecord.RR()
 		host := rr.Name
 		if host == "" {
 			host = "@"
@@ -166,8 +180,13 @@ func (p *Provider) addRecords(ctx context.Context, zone string, records []libdns
 	var addedRecords []libdns.Record
 
 	for key, groupRecords := range groups {
+		adjustedGroupRecords := make([]libdns.Record, len(groupRecords))
+		for i, r := range groupRecords {
+			adjustedGroupRecords[i] = p.adjustRecordName(originalZone, formatedZone, r)
+		}
+
 		data := mythicRecords{}
-		var err = data.FromLibdns(groupRecords)
+		var err = data.FromLibdns(adjustedGroupRecords)
 		if err != nil {
 			return nil, fmt.Errorf("addRecords: Error converting libdns record to mythic record: %w", err)
 		}
@@ -177,7 +196,7 @@ func (p *Provider) addRecords(ctx context.Context, zone string, records []libdns
 			return nil, fmt.Errorf("addRecords: Error creating JSON payload: %w", err)
 		}
 
-		reqURL := apiURL + "/zones/" + url.PathEscape(zone) + "/records/" + url.PathEscape(key.host) + "/" + url.PathEscape(key.rType)
+		reqURL := apiURL + "/zones/" + url.PathEscape(formatedZone) + "/records/" + url.PathEscape(key.host) + "/" + url.PathEscape(key.rType)
 		respBody, err := p.doAPIRequest(ctx, "POST", reqURL, bytes.NewReader(payload))
 		if err != nil {
 			return nil, fmt.Errorf("addRecords: %w", err)
@@ -195,7 +214,7 @@ func (p *Provider) addRecords(ctx context.Context, zone string, records []libdns
 	return addedRecords, nil
 }
 
-func (p *Provider) setRecordsAtomic(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
+func (p *Provider) setRecordsAtomic(ctx context.Context, formatedZone string, originalZone string, records []libdns.Record) ([]libdns.Record, error) {
 	if len(records) == 0 {
 		return nil, nil
 	}
@@ -207,7 +226,8 @@ func (p *Provider) setRecordsAtomic(ctx context.Context, zone string, records []
 
 	groups := make(map[hostType][]libdns.Record)
 	for _, record := range records {
-		rr := record.RR()
+		adjustedRecord := p.adjustRecordName(originalZone, formatedZone, record)
+		rr := adjustedRecord.RR()
 		host := rr.Name
 		if host == "" {
 			host = "@"
@@ -222,8 +242,13 @@ func (p *Provider) setRecordsAtomic(ctx context.Context, zone string, records []
 	var setRecords []libdns.Record
 
 	for key, groupRecords := range groups {
+		adjustedGroupRecords := make([]libdns.Record, len(groupRecords))
+		for i, r := range groupRecords {
+			adjustedGroupRecords[i] = p.adjustRecordName(originalZone, formatedZone, r)
+		}
+
 		data := mythicRecords{}
-		var err = data.FromLibdns(groupRecords)
+		var err = data.FromLibdns(adjustedGroupRecords)
 		if err != nil {
 			return nil, fmt.Errorf("setRecordsAtomic: Error converting libdns records to mythic records: %w", err)
 		}
@@ -233,7 +258,7 @@ func (p *Provider) setRecordsAtomic(ctx context.Context, zone string, records []
 			return nil, fmt.Errorf("setRecordsAtomic: Error creating JSON payload: %w", err)
 		}
 
-		reqURL := apiURL + "/zones/" + url.PathEscape(zone) + "/records/" + url.PathEscape(key.host) + "/" + url.PathEscape(key.rType)
+		reqURL := apiURL + "/zones/" + url.PathEscape(formatedZone) + "/records/" + url.PathEscape(key.host) + "/" + url.PathEscape(key.rType)
 		respBody, err := p.doAPIRequest(ctx, "PUT", reqURL, bytes.NewReader(payload))
 		if err != nil {
 			return nil, fmt.Errorf("setRecordsAtomic: %w", err)
@@ -251,19 +276,21 @@ func (p *Provider) setRecordsAtomic(ctx context.Context, zone string, records []
 	return setRecords, nil
 }
 
-func (p *Provider) removeRecord(ctx context.Context, zone string, record libdns.Record) ([]libdns.Record, error) {
+func (p *Provider) removeRecord(ctx context.Context, formatedZone string, originalZone string, record libdns.Record) ([]libdns.Record, error) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
 	var removedRecords []libdns.Record
 
+	adjustedRecord := p.adjustRecordName(originalZone, formatedZone, record)
+
 	data := mythicRecords{}
-	var err = data.FromLibdns([]libdns.Record{record})
+	var err = data.FromLibdns([]libdns.Record{adjustedRecord})
 	if err != nil {
 		return nil, fmt.Errorf("removeRecord: Error converting libdns record to mythic record: %s", err.Error())
 	}
 
-	reqURL := apiURL + "/zones/" + url.PathEscape(zone) + "/records/" +
+	reqURL := apiURL + "/zones/" + url.PathEscape(formatedZone) + "/records/" +
 		url.PathEscape(data.Records[0].GetName()) + "/" +
 		url.PathEscape(data.Records[0].GetType()) +
 		"?exclude-template&exclude-generated"
