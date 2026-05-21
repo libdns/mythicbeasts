@@ -194,7 +194,7 @@ func (mrl *mythicRecords) UnmarshalJSON(data []byte) error {
 		switch base.Type {
 		case "A", "AAAA", "CNAME", "NS", "PTR", "TXT":
 			mrl.Records[r] = base
-		case "ANAME", "DNAME": // Unoffical types
+		case "ANAME", "DNAME": // Unofficial types
 			mrl.Records[r] = base
 		case "MX":
 			var mxRecord mythicMxRecord
@@ -233,8 +233,8 @@ func (mrl *mythicRecords) UnmarshalJSON(data []byte) error {
 
 	return nil
 }
-func (mrl *mythicRecords) FromLibdns(libdnsrecords []libdns.Record) error {
-	for _, record := range libdnsrecords {
+func (mrl *mythicRecords) FromLibdns(libdnsRecords []libdns.Record) error {
+	for _, record := range libdnsRecords {
 		var rr = record.RR()
 
 		var mr mythicRecord

@@ -19,7 +19,7 @@ var (
 	authURL = "https://auth.mythic-beasts.com/login"
 )
 
-// Logs into mythic beasts to acquire a bearer token for use in future API calls.
+// Logs into Mythic Beasts to acquire a bearer token for use in future API calls.
 // https://www.mythic-beasts.com/support/api/auth#sec-obtaining-a-token
 func (p *Provider) login(ctx context.Context) error {
 	p.mutex.Lock()
@@ -156,7 +156,7 @@ func (p *Provider) doRequest(ctx context.Context, method, endpoint string, body 
 	return respBody, nil
 }
 
-func (p *Provider) addRecords(ctx context.Context, formatedZone string, originalZone string, records []libdns.Record) ([]libdns.Record, error) {
+func (p *Provider) addRecords(ctx context.Context, formattedZone string, originalZone string, records []libdns.Record) ([]libdns.Record, error) {
 	type hostType struct {
 		host  string
 		rType string
@@ -164,7 +164,7 @@ func (p *Provider) addRecords(ctx context.Context, formatedZone string, original
 
 	groups := make(map[hostType][]libdns.Record)
 	for _, record := range records {
-		adjustedRecord := p.adjustRecordName(originalZone, formatedZone, record)
+		adjustedRecord := p.adjustRecordName(originalZone, formattedZone, record)
 		rr := adjustedRecord.RR()
 		host := rr.Name
 		if host == "" {
@@ -182,21 +182,21 @@ func (p *Provider) addRecords(ctx context.Context, formatedZone string, original
 	for key, groupRecords := range groups {
 		adjustedGroupRecords := make([]libdns.Record, len(groupRecords))
 		for i, r := range groupRecords {
-			adjustedGroupRecords[i] = p.adjustRecordName(originalZone, formatedZone, r)
+			adjustedGroupRecords[i] = p.adjustRecordName(originalZone, formattedZone, r)
 		}
 
 		data := mythicRecords{}
 		var err = data.FromLibdns(adjustedGroupRecords)
 		if err != nil {
-			return nil, fmt.Errorf("addRecords: Error converting libdns record to mythic record: %w", err)
+			return nil, fmt.Errorf("addRecords: failed converting libdns record to mythic record: %w", err)
 		}
 
 		payload, err := json.Marshal(data)
 		if err != nil {
-			return nil, fmt.Errorf("addRecords: Error creating JSON payload: %w", err)
+			return nil, fmt.Errorf("addRecords: error creating JSON payload: %w", err)
 		}
 
-		reqURL := "/zones/" + url.PathEscape(formatedZone) + "/records/" + url.PathEscape(key.host) + "/" + url.PathEscape(key.rType)
+		reqURL := "/zones/" + url.PathEscape(formattedZone) + "/records/" + url.PathEscape(key.host) + "/" + url.PathEscape(key.rType)
 		respBody, err := p.doRequest(ctx, "POST", reqURL, bytes.NewReader(payload))
 		if err != nil {
 			return nil, fmt.Errorf("addRecords: %w", err)
@@ -214,7 +214,7 @@ func (p *Provider) addRecords(ctx context.Context, formatedZone string, original
 	return addedRecords, nil
 }
 
-func (p *Provider) setRecordsAtomic(ctx context.Context, formatedZone string, originalZone string, records []libdns.Record) ([]libdns.Record, error) {
+func (p *Provider) setRecordsAtomic(ctx context.Context, formattedZone string, originalZone string, records []libdns.Record) ([]libdns.Record, error) {
 	if len(records) == 0 {
 		return nil, nil
 	}
@@ -226,7 +226,7 @@ func (p *Provider) setRecordsAtomic(ctx context.Context, formatedZone string, or
 
 	groups := make(map[hostType][]libdns.Record)
 	for _, record := range records {
-		adjustedRecord := p.adjustRecordName(originalZone, formatedZone, record)
+		adjustedRecord := p.adjustRecordName(originalZone, formattedZone, record)
 		rr := adjustedRecord.RR()
 		host := rr.Name
 		if host == "" {
@@ -244,21 +244,21 @@ func (p *Provider) setRecordsAtomic(ctx context.Context, formatedZone string, or
 	for key, groupRecords := range groups {
 		adjustedGroupRecords := make([]libdns.Record, len(groupRecords))
 		for i, r := range groupRecords {
-			adjustedGroupRecords[i] = p.adjustRecordName(originalZone, formatedZone, r)
+			adjustedGroupRecords[i] = p.adjustRecordName(originalZone, formattedZone, r)
 		}
 
 		data := mythicRecords{}
 		var err = data.FromLibdns(adjustedGroupRecords)
 		if err != nil {
-			return nil, fmt.Errorf("setRecordsAtomic: Error converting libdns records to mythic records: %w", err)
+			return nil, fmt.Errorf("setRecordsAtomic: failed converting libdns records to mythic records: %w", err)
 		}
 
 		payload, err := json.Marshal(data)
 		if err != nil {
-			return nil, fmt.Errorf("setRecordsAtomic: Error creating JSON payload: %w", err)
+			return nil, fmt.Errorf("setRecordsAtomic: error creating JSON payload: %w", err)
 		}
 
-		reqURL := "/zones/" + url.PathEscape(formatedZone) + "/records/" + url.PathEscape(key.host) + "/" + url.PathEscape(key.rType)
+		reqURL := "/zones/" + url.PathEscape(formattedZone) + "/records/" + url.PathEscape(key.host) + "/" + url.PathEscape(key.rType)
 		respBody, err := p.doRequest(ctx, "PUT", reqURL, bytes.NewReader(payload))
 		if err != nil {
 			return nil, fmt.Errorf("setRecordsAtomic: %w", err)
@@ -276,21 +276,21 @@ func (p *Provider) setRecordsAtomic(ctx context.Context, formatedZone string, or
 	return setRecords, nil
 }
 
-func (p *Provider) removeRecord(ctx context.Context, formatedZone string, originalZone string, record libdns.Record) ([]libdns.Record, error) {
+func (p *Provider) removeRecord(ctx context.Context, formattedZone string, originalZone string, record libdns.Record) ([]libdns.Record, error) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
 	var removedRecords []libdns.Record
 
-	adjustedRecord := p.adjustRecordName(originalZone, formatedZone, record)
+	adjustedRecord := p.adjustRecordName(originalZone, formattedZone, record)
 
 	data := mythicRecords{}
 	var err = data.FromLibdns([]libdns.Record{adjustedRecord})
 	if err != nil {
-		return nil, fmt.Errorf("removeRecord: error converting libdns record to mythic record: %w", err)
+		return nil, fmt.Errorf("removeRecord: failed converting libdns record to mythic record: %w", err)
 	}
 
-	reqURL := "/zones/" + url.PathEscape(formatedZone) + "/records/" +
+	reqURL := "/zones/" + url.PathEscape(formattedZone) + "/records/" +
 		url.PathEscape(data.Records[0].GetName()) + "/" +
 		url.PathEscape(data.Records[0].GetType()) +
 		"?exclude-template&exclude-generated"
@@ -350,10 +350,10 @@ func relativeName(fqdn, zone string) (string, bool) {
 	return "", false
 }
 
-// adjustRecordName copies the record with its name adjusted relative to formatedZone.
-func (p *Provider) adjustRecordName(originalZone, formatedZone string, record libdns.Record) libdns.Record {
+// adjustRecordName copies the record with its name adjusted relative to formattedZone.
+func (p *Provider) adjustRecordName(originalZone, formattedZone string, record libdns.Record) libdns.Record {
 	fqdn := fqdnOf(record.RR().Name, originalZone)
-	relName, ok := relativeName(fqdn, formatedZone)
+	relName, ok := relativeName(fqdn, formattedZone)
 	if !ok {
 		// Fallback to original record name just in case
 		return record

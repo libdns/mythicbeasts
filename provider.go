@@ -22,14 +22,14 @@ type Provider struct {
 	mutex sync.Mutex
 }
 
-// GetRecords lists all records in given zone.
+// GetRecords lists all records in the given zone.
 func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record, error) {
 	err := p.login(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("mythicbeasts: failed getting records for zone %s: %w", zone, err)
 	}
 
-	formatedZone, err := publicsuffix.EffectiveTLDPlusOne(p.unFQDN(zone))
+	formattedZone, err := publicsuffix.EffectiveTLDPlusOne(p.unFQDN(zone))
 	if err != nil {
 		return nil, fmt.Errorf("mythicbeasts: failed getting records for zone %s: provided zone string malformed: %w", zone, err)
 	}
@@ -37,7 +37,7 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
-	respBody, err := p.doRequest(ctx, "GET", "/zones/"+url.PathEscape(formatedZone)+"/records", nil)
+	respBody, err := p.doRequest(ctx, "GET", "/zones/"+url.PathEscape(formattedZone)+"/records", nil)
 	if err != nil {
 		return nil, fmt.Errorf("mythicbeasts: failed getting records for zone %s: %w", zone, err)
 	}
@@ -57,13 +57,13 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 			return nil, fmt.Errorf("mythicbeasts: failed getting records for zone %s: failed to parse record %s: %w", zone, r.GetName(), err)
 		}
 
-		fqdn := fqdnOf(record.RR().Name, formatedZone)
+		fqdn := fqdnOf(record.RR().Name, formattedZone)
 		_, ok := relativeName(fqdn, zone)
 		if !ok {
 			continue
 		}
 
-		adjusted := p.adjustRecordName(formatedZone, zone, record)
+		adjusted := p.adjustRecordName(formattedZone, zone, record)
 		records = append(records, adjusted)
 	}
 	return records, nil
@@ -76,13 +76,13 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 		return nil, fmt.Errorf("mythicbeasts: failed appending records for zone %s: %w", zone, err)
 	}
 
-	formatedZone, err := publicsuffix.EffectiveTLDPlusOne(p.unFQDN(zone))
+	formattedZone, err := publicsuffix.EffectiveTLDPlusOne(p.unFQDN(zone))
 	if err != nil {
 		return nil, fmt.Errorf("mythicbeasts: failed appending records for zone %s: provided zone string malformed: %w", zone, err)
 	}
 
 	// Batch add records
-	appendedRecords, err := p.addRecords(ctx, formatedZone, zone, records)
+	appendedRecords, err := p.addRecords(ctx, formattedZone, zone, records)
 	if err != nil {
 		return nil, fmt.Errorf("mythicbeasts: failed appending records for zone %s: %w", zone, err)
 	}
@@ -98,13 +98,13 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 		return nil, fmt.Errorf("mythicbeasts: failed setting records for zone %s: %w", zone, err)
 	}
 
-	formatedZone, err := publicsuffix.EffectiveTLDPlusOne(p.unFQDN(zone))
+	formattedZone, err := publicsuffix.EffectiveTLDPlusOne(p.unFQDN(zone))
 	if err != nil {
 		return nil, fmt.Errorf("mythicbeasts: failed setting records for zone %s: provided zone string malformed: %w", zone, err)
 	}
 
 	// Atomic set records
-	setRecord, err := p.setRecordsAtomic(ctx, formatedZone, zone, records)
+	setRecord, err := p.setRecordsAtomic(ctx, formattedZone, zone, records)
 	if err != nil {
 		return nil, fmt.Errorf("mythicbeasts: failed setting records for zone %s: %w", zone, err)
 	}
@@ -118,7 +118,7 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 		return nil, fmt.Errorf("mythicbeasts: failed deleting records for zone %s: %w", zone, err)
 	}
 
-	formatedZone, err := publicsuffix.EffectiveTLDPlusOne(p.unFQDN(zone))
+	formattedZone, err := publicsuffix.EffectiveTLDPlusOne(p.unFQDN(zone))
 	if err != nil {
 		return nil, fmt.Errorf("mythicbeasts: failed deleting records for zone %s: provided zone string malformed: %w", zone, err)
 	}
@@ -126,7 +126,7 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 	var deletedRecords []libdns.Record
 
 	for _, record := range records {
-		deletedRecord, err := p.removeRecord(ctx, formatedZone, zone, record)
+		deletedRecord, err := p.removeRecord(ctx, formattedZone, zone, record)
 		if err != nil {
 			return deletedRecords, fmt.Errorf("mythicbeasts: failed deleting records for zone %s: %w", zone, err)
 		}
