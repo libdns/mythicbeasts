@@ -36,20 +36,20 @@ func (p *Provider) login(ctx context.Context) error {
 
 	req, err := http.NewRequestWithContext(ctx, "POST", authURL, reqBody)
 	if err != nil {
-		return fmt.Errorf("login: unknown error when creating http.NewRequest()")
+		return fmt.Errorf("login: failed to create request: %w", err)
 	}
 	req.SetBasicAuth(p.KeyID, p.Secret)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("login: unknown auth error")
+		return fmt.Errorf("login: auth request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("login: %w", err)
+		return fmt.Errorf("login: failed to read response: %w", err)
 	}
 
 	if resp.StatusCode != 200 {
@@ -108,7 +108,7 @@ func (p *Provider) login(ctx context.Context) error {
 func (p *Provider) doAPIRequest(ctx context.Context, method, url string, body io.Reader) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
-		return nil, fmt.Errorf("NewRequestWithContext: %s", err.Error())
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -116,7 +116,7 @@ func (p *Provider) doAPIRequest(ctx context.Context, method, url string, body io
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("http.DefaultClient.Do: %s", err.Error())
+		return nil, fmt.Errorf("http request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -287,7 +287,7 @@ func (p *Provider) removeRecord(ctx context.Context, formatedZone string, origin
 	data := mythicRecords{}
 	var err = data.FromLibdns([]libdns.Record{adjustedRecord})
 	if err != nil {
-		return nil, fmt.Errorf("removeRecord: Error converting libdns record to mythic record: %s", err.Error())
+		return nil, fmt.Errorf("removeRecord: error converting libdns record to mythic record: %w", err)
 	}
 
 	reqURL := apiURL + "/zones/" + url.PathEscape(formatedZone) + "/records/" +

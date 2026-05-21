@@ -199,31 +199,31 @@ func (mrl *mythicRecords) UnmarshalJSON(data []byte) error {
 		case "MX":
 			var mxRecord mythicMxRecord
 			if err := json.Unmarshal(rawRecord, &mxRecord); err != nil {
-				return fmt.Errorf("failed to unmarshal MX record: %v", err)
+				return fmt.Errorf("failed to unmarshal MX record: %w", err)
 			}
 			mrl.Records[r] = mxRecord
 		case "CAA":
 			var caaRecord mythicCaaRecord
 			if err := json.Unmarshal(rawRecord, &caaRecord); err != nil {
-				return fmt.Errorf("failed to unmarshal CAA record: %v", err)
+				return fmt.Errorf("failed to unmarshal CAA record: %w", err)
 			}
 			mrl.Records[r] = caaRecord
 		case "SRV":
 			var srvRecord mythicSrvRecord
 			if err := json.Unmarshal(rawRecord, &srvRecord); err != nil {
-				return fmt.Errorf("failed to unmarshal SRV record: %v", err)
+				return fmt.Errorf("failed to unmarshal SRV record: %w", err)
 			}
 			mrl.Records[r] = srvRecord
 		case "SSHFP":
 			var sshfpRecord mythicSshfpRecord
 			if err := json.Unmarshal(rawRecord, &sshfpRecord); err != nil {
-				return fmt.Errorf("failed to unmarshal SSHFP record: %v", err)
+				return fmt.Errorf("failed to unmarshal SSHFP record: %w", err)
 			}
 			mrl.Records[r] = sshfpRecord
 		case "TLSA":
 			var tlsaRecord mythicTlsaRecord
 			if err := json.Unmarshal(rawRecord, &tlsaRecord); err != nil {
-				return fmt.Errorf("failed to unmarshal TLSA record: %v", err)
+				return fmt.Errorf("failed to unmarshal TLSA record: %w", err)
 			}
 			mrl.Records[r] = tlsaRecord
 		default:

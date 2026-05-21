@@ -32,12 +32,12 @@ func (p *Provider) unFQDN(fqdn string) string {
 func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record, error) {
 	err := p.login(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("login: provider login failed: %w", err)
+		return nil, fmt.Errorf("mythicbeasts: failed getting records for zone %s: %w", zone, err)
 	}
 
 	formatedZone, err := publicsuffix.EffectiveTLDPlusOne(p.unFQDN(zone))
 	if err != nil {
-		return nil, fmt.Errorf("Provided zone string malformed: %w", err)
+		return nil, fmt.Errorf("mythicbeasts: failed getting records for zone %s: provided zone string malformed: %w", zone, err)
 	}
 
 	p.mutex.Lock()
@@ -45,14 +45,14 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 
 	respBody, err := p.doAPIRequest(ctx, "GET", apiURL+"/zones/"+url.PathEscape(formatedZone)+"/records", nil)
 	if err != nil {
-		return nil, fmt.Errorf("GetRecords: %w", err)
+		return nil, fmt.Errorf("mythicbeasts: failed getting records for zone %s: %w", zone, err)
 	}
 
 	result := mythicRecords{}
 
 	err = result.UnmarshalJSON(respBody)
 	if err != nil {
-		return nil, fmt.Errorf("GetRecords: failed to unmarshal response: %w", err)
+		return nil, fmt.Errorf("mythicbeasts: failed getting records for zone %s: failed to unmarshal response: %w", zone, err)
 	}
 
 	var records []libdns.Record
@@ -60,7 +60,7 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 	for _, r := range result.Records {
 		record, err := r.GetLibdnsRecord()
 		if err != nil {
-			return nil, fmt.Errorf("GetRecords: failed to parse record %s: %w", r.GetName(), err)
+			return nil, fmt.Errorf("mythicbeasts: failed getting records for zone %s: failed to parse record %s: %w", zone, r.GetName(), err)
 		}
 
 		fqdn := fqdnOf(record.RR().Name, formatedZone)
@@ -79,18 +79,18 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 func (p *Provider) AppendRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
 	err := p.login(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("login: provider login failed: %w", err)
+		return nil, fmt.Errorf("mythicbeasts: failed appending records for zone %s: %w", zone, err)
 	}
 
 	formatedZone, err := publicsuffix.EffectiveTLDPlusOne(p.unFQDN(zone))
 	if err != nil {
-		return nil, fmt.Errorf("Provided zone string malformed: %w", err)
+		return nil, fmt.Errorf("mythicbeasts: failed appending records for zone %s: provided zone string malformed: %w", zone, err)
 	}
 
 	// Batch add records
 	appendedRecords, err := p.addRecords(ctx, formatedZone, zone, records)
 	if err != nil {
-		return nil, fmt.Errorf("AppendRecords: %w", err)
+		return nil, fmt.Errorf("mythicbeasts: failed appending records for zone %s: %w", zone, err)
 	}
 
 	return appendedRecords, nil
@@ -101,18 +101,18 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
 	err := p.login(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("login: provider login failed: %w", err)
+		return nil, fmt.Errorf("mythicbeasts: failed setting records for zone %s: %w", zone, err)
 	}
 
 	formatedZone, err := publicsuffix.EffectiveTLDPlusOne(p.unFQDN(zone))
 	if err != nil {
-		return nil, fmt.Errorf("Provided zone string malformed: %w", err)
+		return nil, fmt.Errorf("mythicbeasts: failed setting records for zone %s: provided zone string malformed: %w", zone, err)
 	}
 
 	// Atomic set records
 	setRecord, err := p.setRecordsAtomic(ctx, formatedZone, zone, records)
 	if err != nil {
-		return nil, fmt.Errorf("SetRecords: %w", err)
+		return nil, fmt.Errorf("mythicbeasts: failed setting records for zone %s: %w", zone, err)
 	}
 	return setRecord, nil
 }
@@ -121,12 +121,12 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
 	err := p.login(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("login: provider login failed: %w", err)
+		return nil, fmt.Errorf("mythicbeasts: failed deleting records for zone %s: %w", zone, err)
 	}
 
 	formatedZone, err := publicsuffix.EffectiveTLDPlusOne(p.unFQDN(zone))
 	if err != nil {
-		return nil, fmt.Errorf("Provided zone string malformed: %w", err)
+		return nil, fmt.Errorf("mythicbeasts: failed deleting records for zone %s: provided zone string malformed: %w", zone, err)
 	}
 
 	var deletedRecords []libdns.Record
@@ -134,7 +134,7 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 	for _, record := range records {
 		deletedRecord, err := p.removeRecord(ctx, formatedZone, zone, record)
 		if err != nil {
-			return deletedRecords, fmt.Errorf("DeleteRecords: %w", err)
+			return deletedRecords, fmt.Errorf("mythicbeasts: failed deleting records for zone %s: %w", zone, err)
 		}
 		deletedRecords = append(deletedRecords, deletedRecord...)
 	}
